@@ -1,13 +1,12 @@
-from qiskit_ibm_provider import IBMProvider
-from qiskit_aer import AerSimulator
+import cirq
 from typing import List
 from openqaoa.backends.basedevice import DeviceBase
 
 
-class DeviceQiskit(DeviceBase):
+class DeviceCirq(DeviceBase):
     """
     Contains the required information and methods needed to access remote
-    qiskit QPUs.
+    Cirq QPUs.
 
     Attributes
     ----------
@@ -24,35 +23,22 @@ class DeviceQiskit(DeviceBase):
 
     def __init__(
         self,
-        device_name: str,
-        hub: str = None,
-        group: str = None,
-        project: str = None,
-        as_emulator: bool = False,
+        device_name: str = "Simulator",
+        as_emulator: bool = True,
     ):
-        """The user's IBMQ account has to be authenticated through qiskit in
-        order to use this backend. This can be done through `IBMQ.save_account`.
-
-        See: https://quantum-computing.ibm.com/lab/docs/iql/manage/account/ibmq
-
+        """
         Parameters
         ----------
-                device_name: `str`
-                        The name of the IBMQ device to be used
-        hub: `str`
-            Valid IBMQ hub name.
-        group: `str`
-            Valid IBMQ group name.
-        project: `str`
-            The name of the project for which the experimental data will be
-            saved in on IBMQ's end.
+        device_name: `str`
+            The name of the Cirq device to be used.
+            Note: Access to QPUs is currently restricted to those in an approved group.
+            Source: https://quantumai.google/cirq/tutorials/google/start
+        as_emulator: `bool`
+            Whether to use the device as an emulator.
         """
 
         self.device_name = device_name
-        self.device_location = "ibmq"
-        self.hub = hub
-        self.group = group
-        self.project = project
+        self.device_location = "cirq"
         self.as_emulator = as_emulator
 
         self.provider_connected = None
@@ -71,9 +57,9 @@ class DeviceQiskit(DeviceBase):
         Returns
         -------
         bool
-                        True if successfully connected to IBMQ or IBMQ and the QPU backend
-                        if it was specified. False if unable to connect to IBMQ or failure
-                        in the attempt to connect to the specified backend.
+            True if successfully connected to Cirq or Cirq and the QPU backend
+            if it was specified. False if unable to connect to Cirq or failure
+            in the attempt to connect to the specified backend.
         """
 
         self.provider_connected = self._check_provider_connection()
@@ -81,7 +67,10 @@ class DeviceQiskit(DeviceBase):
         if self.provider_connected == False:
             return self.provider_connected
 
-        self.available_qpus = [backend.name for backend in self.provider.backends()]
+        self.available_qpus = [
+            "Bristlecone",
+            "Simulator",
+        ]
 
         if self.device_name == "":
             return self.provider_connected
@@ -97,10 +86,11 @@ class DeviceQiskit(DeviceBase):
         """Private method for checking connection with backend(s)."""
 
         if self.device_name in self.available_qpus:
-            self.backend_device = self.provider.get_backend(self.device_name)
-            self.n_qubits = self.backend_device.configuration().n_qubits
+            if self.device_name == "Bristlecone":
+                self.backend_device = cirq.google.Bristlecone
+            self.n_qubits = len(self.backend_device.qubits)
             if self.as_emulator is True:
-                self.backend_device = AerSimulator.from_backend(self.backend_device)
+                self.backend_device = cirq.Simulator()
             return True
         else:
             print(f"Please choose from {self.available_qpus} for this provider")
@@ -112,30 +102,22 @@ class DeviceQiskit(DeviceBase):
         """
 
         try:
-            # Use default
-            self.provider = IBMProvider()
-            # Unless exact instance is specified
-            if all([self.hub, self.group, self.project]):
-                instance_name = self.hub + "/" + self.group + "/" + self.project
-                assert instance_name in self.provider.instances()
-                self.provider = IBMProvider(instance=instance_name)
-            elif any([self.hub, self.group, self.project]):
-                # if only partially specified, print warning.
-                raise Exception(
-                    "You've only partially specified the instance name. Either"
-                    "the hub, group or project is missing. hub: {}, group: {}, project: {}.\n"
-                    "The default instance will be used instead. (This default can "
-                    "be specified when doing `IBMProvider.save_account`)"
-                )
+            # Simulating provider connection in Cirq
+            # Cirq does not have a direct equivalent to Qiskit's IBMProvider
+            # But we can check if the backend exists
+            self.provider = "cirq_provider"  # Placeholder for actual provider handling
             return True
         except Exception as e:
             print(
-                "An Exception has occured when trying to connect with the provider."
-                "Please note that you are required to set up your IBMQ account locally first."
-                "See: https://quantum-computing.ibm.com/lab/docs/iql/manage/account/ibmq "
-                "for how to save your IBMQ account locally. \n {}".format(e)
+                "An Exception has occurred when trying to connect with the provider."
+                "Please make sure that you have set up your Cirq environment correctly. \n {}".format(
+                    e
+                )
             )
             return False
 
     def connectivity(self) -> List[List[int]]:
-        return self.backend_device.configuration().coupling_map
+        # Returns a simplified coupling map for the example backend
+        return [
+            [i, j] for i in range(self.n_qubits) for j in range(i + 1, self.n_qubits)
+        ]
