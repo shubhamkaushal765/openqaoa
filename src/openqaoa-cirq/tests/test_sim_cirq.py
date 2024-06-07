@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 
-from qiskit import QuantumCircuit
+import cirq
 
 from openqaoa.qaoa_components import (
     PauliOp,
@@ -10,26 +10,26 @@ from openqaoa.qaoa_components import (
     QAOAVariationalExtendedParams,
     QAOAVariationalStandardParams,
 )
-from openqaoa_qiskit.backends import (
-    QAOAQiskitBackendStatevecSimulator,
-    QAOAQiskitBackendShotBasedSimulator,
+from openqaoa_cirq.backends import (
+    QAOACirqBackendStatevecSimulator,
+    QAOACirqBackendShotBasedSimulator,
 )
 from openqaoa.backends import QAOAvectorizedBackendSimulator
 from openqaoa.utilities import X_mixer_hamiltonian, ring_of_disagrees
 
 
-class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
+class TestingQAOACirqSimulatorBackend(unittest.TestCase):
 
-    """This Object tests the QAOA Qiskit Simulator Backend objects, which is
-    tasked with the creation and execution of a QAOA circuit for the qiskit
+    """This Object tests the QAOA Cirq Simulator Backend objects, which is
+    tasked with the creation and execution of a QAOA circuit for the cirq
     library and its local backends.
     """
 
     def test_circuit_angle_assignment_statevec_backend(self):
         """
-        A tests that checks if the circuit created by the Qiskit Backend
+        A tests that checks if the circuit created by the Cirq Backend
         has the appropriate angles assigned before the circuit is executed.
-        Checks the circuit created on IBM Simulator Backends.
+        Checks the circuit created on Cirq Simulator Backends.
         """
 
         ntrials = 10
@@ -61,30 +61,30 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
                 qaoa_descriptor, betas, gammas
             )
 
-            qiskit_statevec_backend = QAOAQiskitBackendStatevecSimulator(
+            cirq_statevec_backend = QAOACirqBackendStatevecSimulator(
                 qaoa_descriptor, None, None, False
             )
 
-            statevec_circuit = qiskit_statevec_backend.qaoa_circuit(variate_params)
+            statevec_circuit = cirq_statevec_backend.qaoa_circuit(variate_params)
 
             # Trivial Decomposition
-            main_circuit = QuantumCircuit(3)
-            main_circuit.rzz(2 * weights[i][0] * gammas[0], 0, 1)
-            main_circuit.rzz(2 * weights[i][1] * gammas[0], 1, 2)
-            main_circuit.rzz(2 * weights[i][2] * gammas[0], 0, 2)
-            main_circuit.rx(-2 * betas[0], 0)
-            main_circuit.rx(-2 * betas[0], 1)
-            main_circuit.rx(-2 * betas[0], 2)
-            main_circuit.rzz(2 * weights[i][0] * gammas[1], 0, 1)
-            main_circuit.rzz(2 * weights[i][1] * gammas[1], 1, 2)
-            main_circuit.rzz(2 * weights[i][2] * gammas[1], 0, 2)
-            main_circuit.rx(-2 * betas[1], 0)
-            main_circuit.rx(-2 * betas[1], 1)
-            main_circuit.rx(-2 * betas[1], 2)
+            main_circuit = cirq.Circuit()
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][0]*gammas[0])(0, 1))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][1]*gammas[0])(1, 2))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][2]*gammas[0])(0, 2))
+            main_circuit.append(cirq.rx(-2*betas[0])(0))
+            main_circuit.append(cirq.rx(-2*betas[0])(1))
+            main_circuit.append(cirq.rx(-2*betas[0])(2))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][0]*gammas[1])(0, 1))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][1]*gammas[1])(1, 2))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][2]*gammas[1])(0, 2))
+            main_circuit.append(cirq.rx(-2*betas[1])(0))
+            main_circuit.append(cirq.rx(-2*betas[1])(1))
+            main_circuit.append(cirq.rx(-2*betas[1])(2))
 
             self.assertEqual(
-                main_circuit.to_instruction().definition,
-                statevec_circuit.to_instruction().definition,
+                main_circuit,
+                statevec_circuit
             )
 
     def test_circuit_angle_assignment_statevec_backend_w_hadamard(self):
@@ -118,31 +118,33 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
                 qaoa_descriptor, betas, gammas
             )
 
-            qiskit_statevec_backend = QAOAQiskitBackendStatevecSimulator(
+            cirq_statevec_backend = QAOACirqBackendStatevecSimulator(
                 qaoa_descriptor, None, None, True
             )
 
-            statevec_circuit = qiskit_statevec_backend.qaoa_circuit(variate_params)
+            statevec_circuit = cirq_statevec_backend.qaoa_circuit(variate_params)
 
             # Trivial Decomposition
-            main_circuit = QuantumCircuit(3)
-            main_circuit.h([0, 1, 2])
-            main_circuit.rzz(2 * weights[i][0] * gammas[0], 0, 1)
-            main_circuit.rzz(2 * weights[i][1] * gammas[0], 1, 2)
-            main_circuit.rzz(2 * weights[i][2] * gammas[0], 0, 2)
-            main_circuit.rx(-2 * betas[0], 0)
-            main_circuit.rx(-2 * betas[0], 1)
-            main_circuit.rx(-2 * betas[0], 2)
-            main_circuit.rzz(2 * weights[i][0] * gammas[1], 0, 1)
-            main_circuit.rzz(2 * weights[i][1] * gammas[1], 1, 2)
-            main_circuit.rzz(2 * weights[i][2] * gammas[1], 0, 2)
-            main_circuit.rx(-2 * betas[1], 0)
-            main_circuit.rx(-2 * betas[1], 1)
-            main_circuit.rx(-2 * betas[1], 2)
+            main_circuit = cirq.Circuit()
+            main_circuit.append(cirq.H(0))
+            main_circuit.append(cirq.H(1))  
+            main_circuit.append(cirq.H(2))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][0]*gammas[0])(0, 1))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][1]*gammas[0])(1, 2))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][2]*gammas[0])(0, 2))
+            main_circuit.append(cirq.rx(-2*betas[0])(0))
+            main_circuit.append(cirq.rx(-2*betas[0])(1))
+            main_circuit.append(cirq.rx(-2*betas[0])(2))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][0]*gammas[1])(0, 1))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][1]*gammas[1])(1, 2))
+            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][2]*gammas[1])(0, 2))
+            main_circuit.append(cirq.rx(-2*betas[1])(0))
+            main_circuit.append(cirq.rx(-2*betas[1])(1))
+            main_circuit.append(cirq.rx(-2*betas[1])(2))
 
             self.assertEqual(
-                main_circuit.to_instruction().definition,
-                statevec_circuit.to_instruction().definition,
+                main_circuit,  
+                statevec_circuit
             )
 
     def test_prepend_circuit(self):
@@ -158,8 +160,10 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
         shots = 10000
 
         # Prepended Circuit
-        prepend_circuit = QuantumCircuit(3)
-        prepend_circuit.x([0, 1, 2])
+        prepend_circuit = cirq.Circuit()
+        prepend_circuit.append(cirq.X(0))
+        prepend_circuit.append(cirq.X(1))
+        prepend_circuit.append(cirq.X(2))
 
         cost_hamil = Hamiltonian(
             [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))],
@@ -170,35 +174,38 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
-        qiskit_statevec_backend = QAOAQiskitBackendStatevecSimulator(
+        cirq_statevec_backend = QAOACirqBackendStatevecSimulator(
             qaoa_descriptor, prepend_circuit, None, True
         )
-        qiskit_shot_backend = QAOAQiskitBackendShotBasedSimulator(
+        cirq_shot_backend = QAOACirqBackendShotBasedSimulator(
             qaoa_descriptor, shots, prepend_circuit, None, True, 1.0
         )
 
-        statevec_circuit = qiskit_statevec_backend.qaoa_circuit(variate_params)
-        shot_circuit = qiskit_shot_backend.qaoa_circuit(variate_params)
-        shot_circuit.remove_final_measurements()
+        statevec_circuit = cirq_statevec_backend.qaoa_circuit(variate_params)
+        shot_circuit = cirq_shot_backend.qaoa_circuit(variate_params)
 
         # Trivial Decomposition
-        main_circuit = QuantumCircuit(3)
-        main_circuit.x([0, 1, 2])
-        main_circuit.h([0, 1, 2])
-        main_circuit.rzz(2 * gammas[0], 0, 1)
-        main_circuit.rzz(2 * gammas[0], 1, 2)
-        main_circuit.rzz(2 * gammas[0], 0, 2)
-        main_circuit.rx(-2 * betas[0], 0)
-        main_circuit.rx(-2 * betas[0], 1)
-        main_circuit.rx(-2 * betas[0], 2)
+        main_circuit = cirq.Circuit()
+        main_circuit.append(cirq.X(0))
+        main_circuit.append(cirq.X(1))
+        main_circuit.append(cirq.X(2))
+        main_circuit.append(cirq.H(0))
+        main_circuit.append(cirq.H(1))
+        main_circuit.append(cirq.H(2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(0, 1))
+        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(1, 2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(0, 2))
+        main_circuit.append(cirq.rx(-2*betas[0])(0))
+        main_circuit.append(cirq.rx(-2*betas[0])(1))
+        main_circuit.append(cirq.rx(-2*betas[0])(2))
 
         self.assertEqual(
-            main_circuit.to_instruction().definition,
-            statevec_circuit.to_instruction().definition,
+            main_circuit,
+            statevec_circuit
         )
         self.assertEqual(
-            main_circuit.to_instruction().definition,
-            shot_circuit.to_instruction().definition,
+            main_circuit,  
+            shot_circuit
         )
 
     def test_append_circuit(self):
@@ -215,8 +222,10 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
         shots = 10000
 
         # Appended Circuit
-        append_circuit = QuantumCircuit(3)
-        append_circuit.x([0, 1, 2])
+        append_circuit = cirq.Circuit()
+        append_circuit.append(cirq.X(0))
+        append_circuit.append(cirq.X(1))
+        append_circuit.append(cirq.X(2))
 
         cost_hamil = Hamiltonian(
             [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))],
@@ -227,41 +236,44 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
-        qiskit_statevec_backend = QAOAQiskitBackendStatevecSimulator(
+        cirq_statevec_backend = QAOACirqBackendStatevecSimulator(
             qaoa_descriptor, None, append_circuit, True
         )
-        qiskit_shot_backend = QAOAQiskitBackendShotBasedSimulator(
+        cirq_shot_backend = QAOACirqBackendShotBasedSimulator(
             qaoa_descriptor, shots, None, append_circuit, True, 1.0
         )
 
-        statevec_circuit = qiskit_statevec_backend.qaoa_circuit(variate_params)
-        shot_circuit = qiskit_shot_backend.qaoa_circuit(variate_params)
-        shot_circuit.remove_final_measurements()
+        statevec_circuit = cirq_statevec_backend.qaoa_circuit(variate_params)
+        shot_circuit = cirq_shot_backend.qaoa_circuit(variate_params)
 
         # Standard Decomposition
-        main_circuit = QuantumCircuit(3)
-        main_circuit.h([0, 1, 2])
-        main_circuit.rzz(2 * gammas[0], 0, 1)
-        main_circuit.rzz(2 * gammas[0], 1, 2)
-        main_circuit.rzz(2 * gammas[0], 0, 2)
-        main_circuit.rx(-2 * betas[0], 0)
-        main_circuit.rx(-2 * betas[0], 1)
-        main_circuit.rx(-2 * betas[0], 2)
-        main_circuit.x([0, 1, 2])
+        main_circuit = cirq.Circuit()
+        main_circuit.append(cirq.H(0))
+        main_circuit.append(cirq.H(1))
+        main_circuit.append(cirq.H(2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(0, 1))
+        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(1, 2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(0, 2))
+        main_circuit.append(cirq.rx(-2*betas[0])(0))
+        main_circuit.append(cirq.rx(-2*betas[0])(1))
+        main_circuit.append(cirq.rx(-2*betas[0])(2))
+        main_circuit.append(cirq.X(0))
+        main_circuit.append(cirq.X(1))
+        main_circuit.append(cirq.X(2))
 
         self.assertEqual(
-            main_circuit.to_instruction().definition,
-            statevec_circuit.to_instruction().definition,
+            main_circuit,
+            statevec_circuit  
         )
         self.assertEqual(
-            main_circuit.to_instruction().definition,
-            shot_circuit.to_instruction().definition,
+            main_circuit,
+            shot_circuit
         )
 
     def test_qaoa_circuit_wavefunction_expectation_equivalence_1(self):
         """
         The following tests with a similar naming scheme check for consistency
-        between the outputs of the qiskit statevector simulator and the
+        between the outputs of the cirq statevector simulator and the
         vectorized backend.
         We compare both the wavefunctions returned by the Backends and the
         expectation values.
@@ -285,12 +297,12 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
                 qaoa_descriptor, betas[i], gammas[i]
             )
 
-            qiskit_backend = QAOAQiskitBackendStatevecSimulator(
+            cirq_backend = QAOACirqBackendStatevecSimulator(
                 qaoa_descriptor, None, None, True
             )
 
-            qiskit_wavefunction = qiskit_backend.wavefunction(variate_params)
-            qiskit_expectation = qiskit_backend.expectation(variate_params)
+            cirq_wavefunction = cirq_backend.wavefunction(variate_params)
+            cirq_expectation = cirq_backend.expectation(variate_params)
 
             vector_backend = QAOAvectorizedBackendSimulator(
                 qaoa_descriptor, None, None, True
@@ -298,20 +310,20 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
             vector_wavefunction = vector_backend.wavefunction(variate_params)
             vector_expectation = vector_backend.expectation(variate_params)
 
-            self.assertAlmostEqual(qiskit_expectation, vector_expectation)
+            self.assertAlmostEqual(cirq_expectation, vector_expectation)
 
             for j in range(2**nqubits):
                 self.assertAlmostEqual(
-                    qiskit_wavefunction[j].real, vector_wavefunction[j].real
+                    cirq_wavefunction[j].real, vector_wavefunction[j].real
                 )
                 self.assertAlmostEqual(
-                    qiskit_wavefunction[j].imag, vector_wavefunction[j].imag
+                    cirq_wavefunction[j].imag, vector_wavefunction[j].imag
                 )
 
     def test_qaoa_circuit_wavefunction_expectation_equivalence_2(self):
         """Due to the difference in the constructions of the statevector simulators,
         there is a global phase difference between the results obtained from
-        qiskit's statevector simulator and OpenQAOA's vectorised simulator. In order to
+        cirq's statevector simulator and OpenQAOA's vectorised simulator. In order to
         show the equivalence between the wavefunctions produced, the expectation
         of a random operator is computed.
         """
@@ -336,12 +348,12 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
                 qaoa_descriptor, betas[i], gammas[i]
             )
 
-            qiskit_backend = QAOAQiskitBackendStatevecSimulator(
+            cirq_backend = QAOACirqBackendStatevecSimulator(
                 qaoa_descriptor, None, None, True
             )
 
-            qiskit_wavefunction = qiskit_backend.wavefunction(variate_params)
-            qiskit_expectation = qiskit_backend.expectation(variate_params)
+            cirq_wavefunction = cirq_backend.wavefunction(variate_params)
+            cirq_expectation = cirq_backend.expectation(variate_params)
 
             vector_backend = QAOAvectorizedBackendSimulator(
                 qaoa_descriptor, None, None, True
@@ -355,23 +367,23 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
             )
             random_herm = random_operator + random_operator.conj().T
 
-            expect_qiskit = np.matmul(
-                np.array(qiskit_wavefunction).T.conjugate(),
-                np.matmul(random_herm, np.array(qiskit_wavefunction)),
+            expect_cirq = np.matmul(
+                np.array(cirq_wavefunction).T.conjugate(),
+                np.matmul(random_herm, np.array(cirq_wavefunction)),
             )
             expect_vector = np.matmul(
                 np.array(vector_wavefunction).T.conjugate(),
                 np.matmul(random_herm, np.array(vector_wavefunction)),
             )
 
-            self.assertAlmostEqual(expect_qiskit.real, expect_vector.real)
-            self.assertAlmostEqual(expect_qiskit.imag, expect_vector.imag)
-            self.assertAlmostEqual(qiskit_expectation, vector_expectation)
+            self.assertAlmostEqual(expect_cirq.real, expect_vector.real)
+            self.assertAlmostEqual(expect_cirq.imag, expect_vector.imag)
+            self.assertAlmostEqual(cirq_expectation, vector_expectation)
 
     def test_qaoa_circuit_wavefunction_expectation_equivalence_3(self):
         """Due to the difference in the constructions of the statevector simulators,
         there is a global phase difference between the results obtained from
-        qiskit's statevector simulator and OpenQAOA's vectorised simulator. In order to
+        cirq's statevector simulator and OpenQAOA's vectorised simulator. In order to
         show the equivalence between the wavefunctions produced, the expectation
         of a random operator is computed.
 
@@ -398,12 +410,12 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
                 qaoa_descriptor, betas[i], gammas[i]
             )
 
-            qiskit_backend = QAOAQiskitBackendStatevecSimulator(
+            cirq_backend = QAOACirqBackendStatevecSimulator(
                 qaoa_descriptor, None, None, True
             )
 
-            qiskit_wavefunction = qiskit_backend.wavefunction(variate_params)
-            qiskit_expectation = qiskit_backend.expectation(variate_params)
+            cirq_wavefunction = cirq_backend.wavefunction(variate_params)
+            cirq_expectation = cirq_backend.expectation(variate_params)
 
             vector_backend = QAOAvectorizedBackendSimulator(
                 qaoa_descriptor, None, None, True
@@ -417,23 +429,23 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
             )
             random_herm = random_operator + random_operator.conj().T
 
-            expect_qiskit = np.matmul(
-                np.array(qiskit_wavefunction).T.conjugate(),
-                np.matmul(random_herm, np.array(qiskit_wavefunction)),
+            expect_cirq = np.matmul(
+                np.array(cirq_wavefunction).T.conjugate(),
+                np.matmul(random_herm, np.array(cirq_wavefunction)),
             )
             expect_vector = np.matmul(
                 np.array(vector_wavefunction).T.conjugate(),
                 np.matmul(random_herm, np.array(vector_wavefunction)),
             )
 
-            self.assertAlmostEqual(expect_qiskit.real, expect_vector.real)
-            self.assertAlmostEqual(expect_qiskit.imag, expect_vector.imag)
-            self.assertAlmostEqual(qiskit_expectation, vector_expectation)
+            self.assertAlmostEqual(expect_cirq.real, expect_vector.real)
+            self.assertAlmostEqual(expect_cirq.imag, expect_vector.imag)
+            self.assertAlmostEqual(cirq_expectation, vector_expectation)
 
     def test_qaoa_circuit_wavefunction_expectation_equivalence_4(self):
         """Due to the difference in the constructions of the statevector simulators,
         there is a global phase difference between the results obtained from
-        qiskit's statevector simulator and OpenQAOA's vectorised simulator. In order to
+        cirq's statevector simulator and OpenQAOA's vectorised simulator. In order to
         show the equivalence between the wavefunctions produced, the expectation
         of a random operator is computed.
 
@@ -468,12 +480,12 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
                 qaoa_descriptor, betas[i], gammas[i]
             )
 
-            qiskit_backend = QAOAQiskitBackendStatevecSimulator(
+            cirq_backend = QAOACirqBackendStatevecSimulator(
                 qaoa_descriptor, None, None, True
             )
 
-            qiskit_wavefunction = qiskit_backend.wavefunction(variate_params)
-            qiskit_expectation = qiskit_backend.expectation(variate_params)
+            cirq_wavefunction = cirq_backend.wavefunction(variate_params)
+            cirq_expectation = cirq_backend.expectation(variate_params)
 
             vector_backend = QAOAvectorizedBackendSimulator(
                 qaoa_descriptor, None, None, True
@@ -487,23 +499,23 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
             )
             random_herm = random_operator + random_operator.conj().T
 
-            expect_qiskit = np.matmul(
-                np.array(qiskit_wavefunction).T.conjugate(),
-                np.matmul(random_herm, np.array(qiskit_wavefunction)),
+            expect_cirq = np.matmul(
+                np.array(cirq_wavefunction).T.conjugate(),
+                np.matmul(random_herm, np.array(cirq_wavefunction)),
             )
             expect_vector = np.matmul(
                 np.array(vector_wavefunction).T.conjugate(),
                 np.matmul(random_herm, np.array(vector_wavefunction)),
             )
 
-            self.assertAlmostEqual(expect_qiskit.real, expect_vector.real)
-            self.assertAlmostEqual(expect_qiskit.imag, expect_vector.imag)
-            self.assertAlmostEqual(qiskit_expectation, vector_expectation)
+            self.assertAlmostEqual(expect_cirq.real, expect_vector.real)
+            self.assertAlmostEqual(expect_cirq.imag, expect_vector.imag)
+            self.assertAlmostEqual(cirq_expectation, vector_expectation)
 
     def test_cost_call(self):
         """
         testing the __call__ method of the base class.
-        Only for vectorized and Qiskit Local Statevector Backends.
+        Only for vectorized and Cirq Local Statevector Backends.
         """
 
         n_qubits = 8
@@ -519,15 +531,15 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
             qaoa_descriptor, betas, gammas
         )
 
-        backend_qiskit_statevec = QAOAQiskitBackendStatevecSimulator(
+        backend_cirq_statevec = QAOACirqBackendStatevecSimulator(
             qaoa_descriptor, prepend_state=None, append_state=None, init_hadamard=True
         )
 
-        exp_qiskit_statevec = backend_qiskit_statevec.expectation(
+        exp_cirq_statevec = backend_cirq_statevec.expectation(
             (variational_params_std)
         )
 
-        assert np.isclose(exp_qiskit_statevec, -6)
+        assert np.isclose(exp_cirq_statevec, -6)
 
     def test_get_wavefunction(self):
         n_qubits = 3
@@ -553,31 +565,30 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
             gammas_pairs=gammas_pairs,
         )
 
-        backend_qiskit_statevec = QAOAQiskitBackendStatevecSimulator(
+        backend_cirq_statevec = QAOACirqBackendStatevecSimulator(
             qaoa_descriptor, prepend_state=None, append_state=None, init_hadamard=True
         )
 
-        wf_qiskit_statevec = backend_qiskit_statevec.wavefunction(
+        wf_cirq_statevec = backend_cirq_statevec.wavefunction(
             (variational_params_std)
         )
         expected_wf = 1j * np.array([-1, 1, 1, -1, 1, -1, -1, 1]) / (2 * np.sqrt(2))
 
         try:
-            assert np.allclose(wf_qiskit_statevec, expected_wf)
+            assert np.allclose(wf_cirq_statevec, expected_wf)
         except AssertionError:
             assert np.allclose(
-                np.real(np.conjugate(wf_qiskit_statevec) * wf_qiskit_statevec),
+                np.real(np.conjugate(wf_cirq_statevec) * wf_cirq_statevec),
                 np.conjugate(expected_wf) * expected_wf,
             )
 
     def test_exact_solution(self):
         """
-        NOTE:Since the implementation of exact solution is backend agnostic
-            Checking it once should be okay.
+        NOTE: Since the implementation of exact solution is backend agnostic,
+            checking it once should be okay.
 
-        Nevertheless, for the sake of completeness it will be tested for all backend
+        Nevertheless, for the sake of completeness, it will be tested for all backend
         instances.
-
         """
 
         n_qubits = 8
@@ -587,7 +598,7 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
         correct_energy = -8
         correct_config = [0, 1, 0, 1, 0, 1, 0, 1]
 
-        # The tests pass regardless of the value of betas and gammas is this correct?
+        # The tests pass regardless of the value of betas and gammas. Is this correct?
         betas = [np.pi / 8]
         gammas = [np.pi / 4]
 
@@ -598,18 +609,18 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
             qaoa_descriptor, betas, gammas
         )
 
-        backend_qiskit_statevec = QAOAQiskitBackendStatevecSimulator(
+        backend_cirq_statevec = QAOACirqBackendStatevecSimulator(
             qaoa_descriptor, prepend_state=None, append_state=None, init_hadamard=True
         )
 
-        # exact solution is defined as the property of the cost function
-        energy_qiskit, config_qiskit = backend_qiskit_statevec.exact_solution
+        # Exact solution is defined as the property of the cost function
+        energy_cirq, config_cirq = backend_cirq_statevec.exact_solution
 
-        assert np.isclose(energy_qiskit, correct_energy)
+        assert np.isclose(energy_cirq, correct_energy)
 
-        config_qiskit = [config.tolist() for config in config_qiskit]
+        config_cirq = [config.tolist() for config in config_cirq]
 
-        assert correct_config in config_qiskit
+        assert correct_config in config_cirq
 
     def test_expectation_w_uncertainty(self):
         """
@@ -629,16 +640,16 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
             qaoa_descriptor, betas, gammas
         )
 
-        backend_qiskit_statevec = QAOAQiskitBackendStatevecSimulator(
+        backend_cirq_statevec = QAOACirqBackendStatevecSimulator(
             qaoa_descriptor, prepend_state=None, append_state=None, init_hadamard=True
         )
 
         (
-            exp_qiskit_statevec,
-            exp_unc_qiskit_statevec,
-        ) = backend_qiskit_statevec.expectation_w_uncertainty(variational_params_std)
+            exp_cirq_statevec,
+            exp_unc_cirq_statevec,
+        ) = backend_cirq_statevec.expectation_w_uncertainty(variational_params_std)
 
-        assert np.isclose(exp_qiskit_statevec, -6)
+        assert np.isclose(exp_cirq_statevec, -6)
 
         terms = [(register[i], register[(i + 1) % n_qubits]) for i in range(n_qubits)]
         weights = [0.5] * len(terms)
@@ -659,7 +670,7 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
         ham_matrix_sq = np.square(ham_matrix)
 
         # Get the wavefunction
-        wf = backend_qiskit_statevec.wavefunction(variational_params_std)
+        wf = backend_cirq_statevec.wavefunction(variational_params_std)
 
         # Get the probabilities
         probs = np.real(np.conjugate(wf) * wf)
@@ -668,12 +679,12 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
         exp_2 = np.dot(probs, ham_matrix)
         std_dev2 = np.sqrt(np.dot(probs, ham_matrix_sq) - exp_2**2)
 
-        assert np.isclose(exp_unc_qiskit_statevec, std_dev2)
+        assert np.isclose(exp_unc_cirq_statevec, std_dev2)
 
     def test_expectation_w_randomizing_variables(self):
         """
         Run ntrials sets of randomized input parameters and compares the
-        expectation value output between the qiskit statevector simulator and
+        expectation value output between the cirq statevector simulator and
         vectorized simulator.
         """
 
@@ -708,22 +719,22 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
                 qaoa_descriptor, betas, gammas
             )
 
-            qiskit_backend = QAOAQiskitBackendStatevecSimulator(
+            cirq_backend = QAOACirqBackendStatevecSimulator(
                 qaoa_descriptor, None, None, init_hadamards[i]
             )
 
-            qiskit_expectation = qiskit_backend.expectation(variate_params)
+            cirq_expectation = cirq_backend.expectation(variate_params)
 
             vector_backend = QAOAvectorizedBackendSimulator(
                 qaoa_descriptor, None, None, init_hadamards[i]
             )
             vector_expectation = vector_backend.expectation(variate_params)
 
-            self.assertAlmostEqual(qiskit_expectation, vector_expectation)
+            self.assertAlmostEqual(cirq_expectation, vector_expectation)
 
     def test_shot_based_simulator(self):
         """
-        Test get_counts in shot-based qiskit simulator.
+        Test get_counts in shot-based cirq simulator.
         """
 
         nqubits = 3
@@ -742,14 +753,14 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
-        qiskit_shot_backend = QAOAQiskitBackendShotBasedSimulator(
+        cirq_shot_backend = QAOACirqBackendShotBasedSimulator(
             qaoa_descriptor, shots, None, None, True, 1.0
         )
 
-        shot_result = qiskit_shot_backend.get_counts(variate_params)
+        shot_result = cirq_shot_backend.get_counts(variate_params)
 
         self.assertEqual(type(shot_result), dict)
-
+        
     def test_cvar_alpha_expectation(self):
         """
         Test computing the expectation value by changing the alpha of the cvar.
@@ -771,18 +782,18 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
-        qiskit_shot_backend = QAOAQiskitBackendShotBasedSimulator(
+        cirq_shot_backend = QAOACirqBackendShotBasedSimulator(
             qaoa_descriptor, shots, None, None, True, 1.0, seed_simulator=1234
         )
 
-        expectation_value_100 = qiskit_shot_backend.expectation(variate_params)
+        expectation_value_100 = cirq_shot_backend.expectation(variate_params)
         self.assertEqual(type(float(expectation_value_100)), float)
 
         # cvar_alpha = 0.5, 0.75
-        qiskit_shot_backend.cvar_alpha = 0.5
-        expectation_value_05 = qiskit_shot_backend.expectation(variate_params)
-        qiskit_shot_backend.cvar_alpha = 0.75
-        expectation_value_075 = qiskit_shot_backend.expectation(variate_params)
+        cirq_shot_backend.cvar_alpha = 0.5
+        expectation_value_05 = cirq_shot_backend.expectation(variate_params)
+        cirq_shot_backend.cvar_alpha = 0.75
+        expectation_value_075 = cirq_shot_backend.expectation(variate_params)
         self.assertNotEqual(expectation_value_05, expectation_value_075)
         self.assertEqual(type(float(expectation_value_05)), float)
         self.assertEqual(type(float(expectation_value_075)), float)
@@ -790,7 +801,7 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
     def test_standard_decomposition_branch_in_circuit_construction(self):
         """
         XY Pauli is not an implemented low level gate. Produces NotImplementedError
-        as the standard decomposition for the XY PauliGate doesnt exist.
+        as the standard decomposition for the XY PauliGate doesn't exist.
         """
 
         nqubits = 3
@@ -811,7 +822,7 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
 
         self.assertRaises(
             NotImplementedError,
-            QAOAQiskitBackendShotBasedSimulator,
+            QAOACirqBackendShotBasedSimulator,
             qaoa_descriptor,
             shots,
             None,
@@ -822,13 +833,12 @@ class TestingQAOAQiskitSimulatorBackend(unittest.TestCase):
 
         self.assertRaises(
             NotImplementedError,
-            QAOAQiskitBackendStatevecSimulator,
+            QAOACirqBackendStatevecSimulator,
             qaoa_descriptor,
             None,
             None,
             True,
         )
-
 
 if __name__ == "__main__":
     unittest.main()

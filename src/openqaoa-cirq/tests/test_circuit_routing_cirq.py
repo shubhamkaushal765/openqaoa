@@ -59,16 +59,14 @@ class ExpectedRouting:
 class TestingQubitRouting(unittest.TestCase):
     @pytest.mark.qpu
     def setUp(self):
-        # case qubits device > qubits problem (IBM KYOTO)
-        self.IBM_KYOTO_KNAPSACK = ExpectedRouting(
+        # case qubits device > qubits problem (Cirq Google Sycamore)
+        self.GOOGLE_SYCAMORE_KNAPSACK = ExpectedRouting(
             qubo=Knapsack.random_instance(n_items=3, seed=20).qubo,
-            # qubo = NumberPartition(list(range(1,4))).qubo,
-            device_location="ibmq",
-            device_name="ibm_kyoto",
+            device_location="cirq",
+            device_name="sycamore",
             qpu_credentials={
-                "hub": "ibm-q",
-                "group": "open",
-                "project": "main",
+                "project_id": "your-google-cloud-project-id",  # Replace with your actual project ID
+                "processor_id": "your-google-cloud-processor-id",
                 "as_emulator": True,
             },
             problem_to_solve=[
@@ -83,7 +81,6 @@ class TestingQubitRouting(unittest.TestCase):
                 (1, 3),
                 (1, 4),
             ],
-            # problem_to_solve = [[0,1],[1,2],[2,3]],
             initial_mapping=None,
             gate_indices_list=[
                 [0, 1],
@@ -125,8 +122,8 @@ class TestingQubitRouting(unittest.TestCase):
             final_logical_qubit_order=[1, 2, 4, 0, 3],
         )
 
-        # case qubits problem == 2 (IBM kyoto)
-        self.IBM_KYOTO_QUBO2 = ExpectedRouting(
+        # case qubits problem == 2 (Cirq Google Sycamore)
+        self.GOOGLE_SYCAMORE_QUBO2 = ExpectedRouting(
             qubo=QUBO.from_dict(
                 {
                     "terms": [[0, 1], [0, 2], [1]],
@@ -134,12 +131,11 @@ class TestingQubitRouting(unittest.TestCase):
                     "n": 3,
                 }
             ),
-            device_location="ibmq",
-            device_name="ibm_kyoto",
+            device_location="cirq",
+            device_name="sycamore",
             qpu_credentials={
-                "hub": "ibm-q",
-                "group": "open",
-                "project": "main",
+                "project_id": "your-google-cloud-project-id",  # Replace with your actual project ID
+                "processor_id": "your-google-cloud-processor-id",
                 "as_emulator": True,
             },
             problem_to_solve=[(0, 1), (0, 2)],
@@ -150,15 +146,14 @@ class TestingQubitRouting(unittest.TestCase):
             final_logical_qubit_order=[0, 2, 1],
         )
 
-        # case qubits device == qubits problem (IBM perth)
-        self.IBM_KYOTO_NPARTITION = ExpectedRouting(
+        # case qubits device == qubits problem (Cirq Google Sycamore)
+        self.GOOGLE_SYCAMORE_NPARTITION = ExpectedRouting(
             qubo=NumberPartition.random_instance(n_numbers=7, seed=2).qubo,
-            device_location="ibmq",
-            device_name="ibm_kyoto",
+            device_location="cirq",
+            device_name="sycamore",
             qpu_credentials={
-                "hub": "ibm-q",
-                "group": "open",
-                "project": "main",
+                "project_id": "your-google-cloud-project-id",  # Replace with your actual project ID
+                "processor_id": "your-google-cloud-processor-id",
                 "as_emulator": True,
             },
             problem_to_solve=[

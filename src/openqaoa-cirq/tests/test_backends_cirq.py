@@ -8,7 +8,7 @@ from openqaoa.qaoa_components import (
     QAOADescriptor,
 )
 from openqaoa.utilities import X_mixer_hamiltonian
-from openqaoa_qiskit.backends import DeviceQiskit
+from openqaoa_cirq.backends import DeviceCirq
 
 
 def get_params():
@@ -30,42 +30,32 @@ class TestingBackendQPUs(unittest.TestCase):
 
     @pytest.mark.qpu
     def setUp(self):
-        self.HUB = "ibm-q"
-        self.GROUP = "open"
-        self.PROJECT = "main"
+        self.PROJECT_ID = "your-project-id"  # Replace with your actual project ID
 
     @pytest.mark.qpu
     def test_get_counts_and_expectation_n_shots(self):
         """
-        TODO: test needs to be updated as DEVICE_ACCESS_OBJECT_MAPPER is now dynamically filled based on whether a module exists.
-
-        Check that the .get_counts, .expectation and .expecation_w_uncertainty methods admit n_shots as an argument for the backends of all QPUs.
+        Check that the .get_counts, .expectation and .expectation_w_uncertainty methods admit n_shots as an argument for the backends of all QPUs.
         """
 
         list_device_attributes = [
             {
-                "QPU": "Qiskit",
-                "device_name": "ibmq_qasm_simulator",
-                "hub": self.HUB,
-                "group": self.GROUP,
-                "project": self.PROJECT,
+                "QPU": "Cirq",
+                "device_name": "cirq_qasm_simulator",
+                "project_id": self.PROJECT_ID,
             }
         ]
 
-        assert DeviceQiskit in DEVICE_ACCESS_OBJECT_MAPPER.keys()
+        assert DeviceCirq in DEVICE_ACCESS_OBJECT_MAPPER.keys()
 
-        device = DeviceQiskit
-        backend = DEVICE_ACCESS_OBJECT_MAPPER[DeviceQiskit]
+        device = DeviceCirq
+        backend = DEVICE_ACCESS_OBJECT_MAPPER[DeviceCirq]
         device_attributes = list_device_attributes[0]
 
         qaoa_descriptor, variational_params_std = get_params()
 
         QPU_name = device_attributes.pop("QPU")
         print("Testing {} backend.".format(QPU_name))
-
-        # if QPU_name in ["AWS", 'Qiskit']:
-        #     print(f"Skipping test for {QPU_name} backend.")
-        #     continue
 
         try:
             print(device, device_attributes)
@@ -80,7 +70,7 @@ class TestingBackendQPUs(unittest.TestCase):
                 init_hadamard=True,
             )
 
-            # Check that the .get_counts, .expectation and .expectation_w_variance methods admit n_shots as an argument
+            # Check that the .get_counts, .expectation and .expectation_w_uncertainty methods admit n_shots as an argument
             assert (
                 sum(
                     backend.get_counts(

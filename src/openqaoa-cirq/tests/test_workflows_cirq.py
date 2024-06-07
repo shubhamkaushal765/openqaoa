@@ -4,9 +4,7 @@ import networkx as nw
 import numpy as np
 import datetime
 
-from qiskit.providers.fake_provider import FakeVigo
-from qiskit.providers.aer.noise import NoiseModel
-from qiskit.providers.aer import QasmSimulator
+import cirq
 
 from openqaoa import QAOA, RQAOA
 from openqaoa.algorithms import QAOAResult, RQAOAResult
@@ -39,15 +37,15 @@ from openqaoa.optimizers.training_vqa import (
     CustomScipyGradientOptimizer,
     PennyLaneOptimizer,
 )
-from openqaoa_qiskit.backends import DeviceQiskit
-from openqaoa_qiskit.backends import (
-    QAOAQiskitBackendShotBasedSimulator,
-    QAOAQiskitBackendStatevecSimulator,
+from openqaoa_cirq.backends import DeviceCirq
+from openqaoa_cirq.backends import (
+    QAOACirqBackendShotBasedSimulator,
+    QAOACirqBackendStatevecSimulator,
 )
 
 
-ALLOWED_LOCAL_SIMUALTORS = SUPPORTED_LOCAL_SIMULATORS
-LOCAL_DEVICES = ALLOWED_LOCAL_SIMUALTORS + ["6q-qvm", "Aspen-11"]
+ALLOWED_LOCAL_SIMULATORS = SUPPORTED_LOCAL_SIMULATORS
+LOCAL_DEVICES = ALLOWED_LOCAL_SIMULATORS + ["cirq-simulator"]
 
 
 def _compare_qaoa_results(dict_old, dict_new):
@@ -119,14 +117,13 @@ class TestingVanillaQAOA(unittest.TestCase):
         q = QAOA()
         q.set_device(
             create_device(
-                "ibmq",
+                "cirq",
                 name="place_holder",
-                **{"hub": "***", "group": "***", "project": "***"},
             )
         )
-        assert type(q.device) == DeviceQiskit
+        assert type(q.device) == DeviceCirq
         assert q.device.device_name == "place_holder"
-        assert q.device.device_location == "ibmq"
+        assert q.device.device_location == "cirq"
 
     def test_compile_before_optimise(self):
         """
@@ -140,10 +137,10 @@ class TestingVanillaQAOA(unittest.TestCase):
 
         self.assertRaises(ValueError, lambda: q.optimize())
 
-    def test_set_backend_properties_check_backend_qiskit_qasm(self):
+    def test_set_backend_properties_check_backend_cirq_shot(self):
         """
         Check if the backend returned by set_backend_properties is correct
-        Based on the input device. For qiskit qasm simulator.
+        Based on the input device. For cirq shot-based simulator.
         Also Checks if defaults from workflows are used in the backend.
         """
 
@@ -154,10 +151,10 @@ class TestingVanillaQAOA(unittest.TestCase):
         qubo_problem = problem.qubo
 
         q = QAOA()
-        q.set_device(create_device(location="local", name="qiskit.qasm_simulator"))
+        q.set_device(create_device(location="local", name="cirq-simulator"))
         q.compile(problem=qubo_problem)
 
-        self.assertEqual(type(q.backend), QAOAQiskitBackendShotBasedSimulator)
+        self.assertEqual(type(q.backend), QAOACirqBackendShotBasedSimulator)
 
         self.assertEqual(q.backend.init_hadamard, True)
         self.assertEqual(q.backend.prepend_state, None)
@@ -165,10 +162,10 @@ class TestingVanillaQAOA(unittest.TestCase):
         self.assertEqual(q.backend.cvar_alpha, 1)
         self.assertEqual(q.backend.n_shots, 100)
 
-    def test_set_backend_properties_check_backend_qiskit_statevector(self):
+    def test_set_backend_properties_check_backend_cirq_statevector(self):
         """
         Check if the backend returned by set_backend_properties is correct
-        Based on the input device. For qiskit statevector simulator.
+        Based on the input device. For cirq statevector simulator.
         Also Checks if defaults from workflows are used in the backend.
         """
 
@@ -180,11 +177,11 @@ class TestingVanillaQAOA(unittest.TestCase):
 
         q = QAOA()
         q.set_device(
-            create_device(location="local", name="qiskit.statevector_simulator")
+            create_device(location="local", name="cirq-simulator")
         )
         q.compile(problem=qubo_problem)
 
-        self.assertEqual(type(q.backend), QAOAQiskitBackendStatevecSimulator)
+        self.assertEqual(type(q.backend), QAOACirqBackendStatevecSimulator)
 
         self.assertEqual(q.backend.init_hadamard, True)
         self.assertEqual(q.backend.prepend_state, None)
@@ -195,16 +192,14 @@ class TestingVanillaQAOA(unittest.TestCase):
 
     def test_qaoa_asdict_with_noise(self):
         """test to check that we can serialize a QAOA object with noise"""
-        device_backend = FakeVigo()
-        device = QasmSimulator.from_backend(device_backend)
-        noise_model = NoiseModel.from_backend(device)
+        noise_model = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.01))
         q_noisy_shot = QAOA()
 
         # device
-        qiskit_noisy_shot = create_device(
-            location="local", name="qiskit.qasm_simulator"
+        cirq_noisy_shot = create_device(
+            location="local", name="cirq-simulator"
         )
-        q_noisy_shot.set_device(qiskit_noisy_shot)
+        q_noisy_shot.set_device(cirq_noisy_shot)
         # circuit properties
         q_noisy_shot.set_circuit_properties(
             p=2, param_type="standard", init_type="rand", mixer_hamiltonian="x"
@@ -232,7 +227,7 @@ class TestingVanillaQAOA(unittest.TestCase):
 
         # run rqaoa with different devices, and save the objcets in a list
         qaoas = []
-        for device in [create_device(location="local", name="qiskit.shot_simulator")]:
+        for device in [create_device(location="local", name="cirq-simulator")]:
             q = QAOA()
             q.set_device(device)
             q.set_circuit_properties(
@@ -396,7 +391,7 @@ class TestingRQAOA(unittest.TestCase):
         mixer="x",
         method="cobyla",
         maxiter=15,
-        name_device="qiskit.statevector_simulator",
+        name_device="cirq-simulator",
         return_object=False,
     ):
         if problem == None:
@@ -405,8 +400,8 @@ class TestingRQAOA(unittest.TestCase):
             ).qubo
 
         r = RQAOA()
-        qiskit_device = create_device(location="local", name=name_device)
-        r.set_device(qiskit_device)
+        cirq_device = create_device(location="local", name=name_device)
+        r.set_device(cirq_device)
         if type == "adaptive":
             r.set_rqaoa_parameters(
                 n_cutoff=n_cutoff, n_max=eliminations, rqaoa_type=type
@@ -585,7 +580,7 @@ class TestingRQAOA(unittest.TestCase):
 
         for schedule in schedules:
             solutions.append(self.__run_rqaoa("custom", problem, n_cutoff, schedule))
-
+            
         # Correct solution
         exact_states = [
             "1111100000",
@@ -1013,10 +1008,7 @@ class TestingRQAOA(unittest.TestCase):
             "noise_model",
             "initial_qubit_mapping",
             "seed_simulator",
-            "qiskit_simulation_method",
             "active_reset",
-            "rewiring",
-            "disable_qubit_rewiring",
             "classical_optimizer",
             "optimize",
             "method",
@@ -1209,8 +1201,7 @@ class TestingRQAOA(unittest.TestCase):
                 # check that the intermediate measurements are empty
                 for step in dictionary["data"]["result"]["intermediate_steps"]:
                     assert (
-                        step["qaoa_results"]["intermediate"]["measurement_outcomes"]
-                        == []
+                        step["qaoa_results"]["intermediate"]["measurement_outcomes"] == []
                     ), f"File {file_name} has intermediate measurements, but it should not have them."
 
             else:  # qaoa files
@@ -1223,7 +1214,7 @@ class TestingRQAOA(unittest.TestCase):
                     dictionary["header"]["algorithm"] == "qaoa"
                 ), f"File {file_name} has a different algorithm than qaoa, which is the expected algorithm."
 
-                # check that the intermediate mesuraments are not empty
+                # check that the intermediate measurements are not empty
                 assert (
                     len(
                         dictionary["data"]["result"]["intermediate"][
@@ -1255,15 +1246,13 @@ class TestingRQAOA(unittest.TestCase):
 
         # run rqaoa with different devices, and save the objcets in a list
         rqaoas = []
-        for device in [
-            create_device(location="local", name="qiskit.shot_simulator"),
-        ]:
+        for device in [create_device(location="local", name="cirq-simulator")]:
             r = RQAOA()
             r.set_device(device)
             r.set_circuit_properties(
                 p=1, param_type="extended", init_type="rand", mixer_hamiltonian="x"
             )
-            r.set_backend_properties(n_shots=50)
+            r.set_backend_properties(prepend_state=None, append_state=None)
             r.set_classical_optimizer(maxiter=10, optimization_progress=True)
             r.set_rqaoa_parameters(rqaoa_type="adaptive", n_cutoff=3)
             r.set_exp_tags({"tag1": "value1", "tag2": "value2"})
@@ -1382,7 +1371,6 @@ class TestingRQAOA(unittest.TestCase):
         assert (
             error
         ), "Optimizer.from_dict should raise an error when using a RQAOA dictionary"
-
 
 if __name__ == "__main__":
     unittest.main()

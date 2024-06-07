@@ -2,37 +2,37 @@ import unittest
 import itertools
 import pytest
 
-from openqaoa_qiskit.backends import DeviceQiskit
+from openqaoa_cirq.backends import DeviceCirq
 
 
-class TestingDeviceQiskit(unittest.TestCase):
+class TestingDeviceCirq(unittest.TestCase):
 
-    """These tests check the Object used to access IBMQ and their available
+    """These tests check the Object used to access Cirq and their available
     QPUs can be established.
     For any tests using provided credentials, the tests will only pass if those
-    details provided are correct/valid with IBMQ.
+    details provided are correct/valid with Cirq.
 
     Please ensure that the provided api token, hub, group and project in the
     crendentials.json are correct.
-    All of these can be found in your IBMQ Account Page.
+    All of these can be found in your Cirq Account Page.
     """
 
     @pytest.mark.api
     def setUp(self):
-        self.HUB = "ibm-q"
+        self.HUB = "cirq"
         self.GROUP = "open"
         self.PROJECT = "main"
-        self.INSTANCE = "ibm-q/open/main"
+        self.INSTANCE = "cirq/open/main"
 
     @pytest.mark.api
     def test_changing_provider(self):
         """
-        This test checks that the specified hub,group and project in the
-        initialisation of DeviceQiskit changes the provider to the appropriate
+        This test checks that the specified hub, group and project in the
+        initialization of DeviceCirq changes the provider to the appropriate
         destination.
         """
 
-        device_obj = DeviceQiskit(device_name="ibmq_manila")
+        device_obj = DeviceCirq(device_name="google_sycamore")
         device_obj.check_connection()
 
         provider_instances = device_obj.provider.instances()
@@ -40,8 +40,8 @@ class TestingDeviceQiskit(unittest.TestCase):
         if len(provider_instances) >= 2:
             for each_item in provider_instances[:2]:
                 [hub, group, project] = each_item.split("/")
-                device_obj2 = DeviceQiskit(
-                    device_name="ibmq_manila", hub=hub, group=group, project=project
+                device_obj2 = DeviceCirq(
+                    device_name="google_sycamore", hub=hub, group=group, project=project
                 )
                 device_obj2.check_connection()
 
@@ -50,20 +50,20 @@ class TestingDeviceQiskit(unittest.TestCase):
     @pytest.mark.api
     def test_check_connection_provider_no_backend_wrong_hub_group_project(self):
         """
-        Hub, group and project must always be specified together.
-        If either the hub, group or project is wrongly specified, check_connection should
+        Hub, group, and project must always be specified together.
+        If either the hub, group, or project is wrongly specified, check_connection should
         return False.
         If not all 3 are specified, check_connection should return False.
         The provider_connected attribute should be updated to False.
         Since the API Token is loaded from save_account, the api token will be
-        checked by Qiskit.
+        checked by Cirq.
         """
 
         for each_combi in itertools.product(
             ["invalid_hub", None], ["invalid_group", None], ["invalid_project", None]
         ):
             if each_combi != (None, None, None):
-                device_obj = DeviceQiskit(
+                device_obj = DeviceCirq(
                     device_name="",
                     hub=each_combi[0],
                     group=each_combi[1],
@@ -82,7 +82,7 @@ class TestingDeviceQiskit(unittest.TestCase):
         The provider_connected attribute should be updated to True.
         """
 
-        device_obj = DeviceQiskit(
+        device_obj = DeviceCirq(
             device_name="", hub=self.HUB, group=self.GROUP, project=self.PROJECT
         )
 
@@ -99,14 +99,14 @@ class TestingDeviceQiskit(unittest.TestCase):
         The qpu_connected attribute should be updated to True.
         """
 
-        device_obj = DeviceQiskit(
+        device_obj = DeviceCirq(
             device_name="", hub=self.HUB, group=self.GROUP, project=self.PROJECT
         )
 
         device_obj.check_connection()
         valid_qpu_name = device_obj.available_qpus[0]
 
-        device_obj = DeviceQiskit(
+        device_obj = DeviceCirq(
             device_name=valid_qpu_name,
             hub=self.HUB,
             group=self.GROUP,
@@ -126,7 +126,7 @@ class TestingDeviceQiskit(unittest.TestCase):
         The qpu_connected attribute should be updated to False.
         """
 
-        device_obj = DeviceQiskit(
+        device_obj = DeviceCirq(
             device_name="random_invalid_backend",
             hub=self.HUB,
             group=self.GROUP,

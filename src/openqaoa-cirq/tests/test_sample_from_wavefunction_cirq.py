@@ -42,22 +42,22 @@ class TestGetSamplesMethod(unittest.TestCase):
         backend_vectorized = get_qaoa_backend(
             qaoa_descriptor, DeviceLocal("vectorized")
         )
-        backend_qiskit_statevec = get_qaoa_backend(
-            qaoa_descriptor, DeviceLocal("qiskit.statevector_simulator")
+        backend_cirq_statevec = get_qaoa_backend(
+            qaoa_descriptor, DeviceLocal("cirq.simulator")
         )
 
         shot_results_vec = backend_vectorized.sample_from_wavefunction(
             variational_params_std, n_samples=15
         )
-        shot_results_qiskit = backend_qiskit_statevec.sample_from_wavefunction(
+        shot_results_cirq = backend_cirq_statevec.sample_from_wavefunction(
             variational_params_std, n_samples=15
         )
 
         bool_list_vec = [x == solution for x in shot_results_vec]
-        bool_list_qiskit = [x == solution for x in shot_results_qiskit]
+        bool_list_cirq = [x == solution for x in shot_results_cirq]
 
         assert all(bool_list_vec)
-        assert all(bool_list_qiskit)
+        assert all(bool_list_cirq)
 
     def test_samples_limiting_case(self):
         """
@@ -87,8 +87,8 @@ class TestGetSamplesMethod(unittest.TestCase):
         backend_vectorized = get_qaoa_backend(
             qaoa_descriptor, DeviceLocal("vectorized")
         )
-        backend_qiskit_statevec = get_qaoa_backend(
-            qaoa_descriptor, DeviceLocal("qiskit.statevector_simulator")
+        backend_cirq_statevec = get_qaoa_backend(
+            qaoa_descriptor, DeviceLocal("cirq.simulator")
         )
 
         # wf_vec = backend_vectorized.wavefunction(variational_params_std)
@@ -97,10 +97,10 @@ class TestGetSamplesMethod(unittest.TestCase):
             dtype=float,
         )
 
-        # wf_qiskit = backend_qiskit_statevec.wavefunction(variational_params_std)
-        prob_wf_qiskit = np.array(
+        # wf_cirq = backend_cirq_statevec.wavefunction(variational_params_std)
+        prob_wf_cirq = np.array(
             list(
-                backend_qiskit_statevec.probability_dict(
+                backend_cirq_statevec.probability_dict(
                     variational_params_std
                 ).values()
             ),
@@ -110,27 +110,27 @@ class TestGetSamplesMethod(unittest.TestCase):
         samples_vec = backend_vectorized.sample_from_wavefunction(
             variational_params_std, n_samples=nshots
         )
-        samples_qiskit = backend_qiskit_statevec.sample_from_wavefunction(
+        samples_cirq = backend_cirq_statevec.sample_from_wavefunction(
             variational_params_std, n_samples=nshots
         )
 
         samples_dict_vec = {bin(x)[2:].zfill(n_qubits): 0 for x in range(2**n_qubits)}
-        samples_dict_qiskit = {
+        samples_dict_cirq = {
             bin(x)[2:].zfill(n_qubits): 0 for x in range(2**n_qubits)
         }
 
         for shot_result in samples_vec:
             samples_dict_vec[shot_result] += 1 / nshots
 
-        for shot_result in samples_qiskit:
-            samples_dict_qiskit[shot_result] += 1 / nshots
+        for shot_result in samples_cirq:
+            samples_dict_cirq[shot_result] += 1 / nshots
 
         samples_prob_vec = np.array(list(samples_dict_vec.values()), dtype=float)
-        samples_prob_qiskit = np.array(list(samples_dict_qiskit.values()), dtype=float)
+        samples_prob_cirq = np.array(list(samples_dict_cirq.values()), dtype=float)
 
         np.testing.assert_array_almost_equal(prob_wf_vec, samples_prob_vec, decimal=3)
         np.testing.assert_array_almost_equal(
-            prob_wf_qiskit, samples_prob_qiskit, decimal=3
+            prob_wf_cirq, samples_prob_cirq, decimal=3
         )
 
 

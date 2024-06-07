@@ -1,9 +1,10 @@
 import unittest
 import networkx as nx
+import cirq
 
 from openqaoa import QAOA
 from openqaoa.problems import MinimumVertexCover
-from openqaoa.backends import create_device
+from openqaoa.backends.devices import DeviceCirq
 
 
 class TestingLoggerClass(unittest.TestCase):
@@ -12,10 +13,11 @@ class TestingLoggerClass(unittest.TestCase):
         g = nx.circulant_graph(6, [1])
         vc = MinimumVertexCover(g, field=1.0, penalty=10).qubo
 
-        # shot based simulator:
-        q_shot = QAOA()
-        q_shot_dev = create_device(location="local", name="qiskit.shot_simulator")
-        q_shot.set_device(q_shot_dev)
+        # Create the Cirq device
+        device = DeviceCirq(device_name="Simulator")
+
+        # Create the QAOA instance
+        q_shot = QAOA(device)
 
         q_shot.compile(vc)
         q_shot.optimize()

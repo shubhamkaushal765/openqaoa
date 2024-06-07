@@ -16,8 +16,8 @@ from openqaoa.qaoa_components import (
     QAOADescriptor,
 )
 
-from openqaoa_qiskit.backends import (
-    QAOAQiskitBackendShotBasedSimulator,
+from openqaoa_cirq.backends import (
+    QAOACirqBackendShotBasedSimulator,
 )
 
 from openqaoa.backends.wrapper import SPAMTwirlingWrapper
@@ -46,35 +46,33 @@ class TestingSPAMTwirlingWrapper(unittest.TestCase):
     These tests check methods of the SPAM Twirling wrapper.
     """
 
-    def setUp(
-        self,
-    ):
+    def setUp(self):
         self.n_batches = 5
         self.calibration_data_location = (
             "./tests/qpu_calibration_data/spam_twirling_mock.json"
         )
         self.qaoa_descriptor, self.variate_params = get_params()
 
-        self.qiskit_shot_backend = QAOAQiskitBackendShotBasedSimulator(
+        self.cirq_shot_backend = QAOACirqBackendShotBasedSimulator(
             qaoa_descriptor=self.qaoa_descriptor,
             n_shots=100,
             prepend_state=None,
             append_state=None,
             init_hadamard=True,
             cvar_alpha=1.0,
-            qiskit_simulation_method="automatic",
+            cirq_simulation_method="automatic",
             seed_simulator=2642,
             noise_model=None,
         )
 
         self.wrapped_obj = SPAMTwirlingWrapper(
-            self.qiskit_shot_backend,
+            self.cirq_shot_backend,
             n_batches=self.n_batches,
             calibration_data_location=self.calibration_data_location,
         )
 
         self.wrapped_obj_trivial = SPAMTwirlingWrapper(
-            self.qiskit_shot_backend,
+            self.cirq_shot_backend,
             n_batches=1,
             calibration_data_location=self.calibration_data_location,
         )
@@ -86,17 +84,12 @@ class TestingSPAMTwirlingWrapper(unittest.TestCase):
         any of the relevant backend objects as an argument.
         """
 
-        rigetti_args = {
-            "as_qvm": True,
-            "execution_timeout": 10,
-            "compiler_timeout": 100,
-        }
         device_list = []
         device_list.append(
-            create_device(location="local", name="qiskit.qasm_simulator")
+            create_device(location="local", name="cirq.simulator")
         )
         device_list.append(
-            create_device(location="ibmq", name="ibm_kyoto"),
+            create_device(location="google", name="sycamore"),
         )
 
         for device in device_list:
@@ -139,7 +132,7 @@ class TestingSPAMTwirlingWrapper(unittest.TestCase):
             self.wrapped_obj
             self.wrapped_obj_trivial
         except NameError:
-            print("Skipping Qiskit tests as Qiskit is not installed.")
+            print("Skipping Cirq tests as Cirq is not installed.")
             return None
 
         assert self.wrapped_obj.get_counts(
@@ -153,7 +146,7 @@ class TestingSPAMTwirlingWrapper(unittest.TestCase):
 
         assert self.wrapped_obj_trivial.get_counts(
             self.variate_params, n_shots=100, seed=1
-        ) == self.qiskit_shot_backend.get_counts(
+        ) == self.cirq_shot_backend.get_counts(
             self.variate_params, n_shots=100
         ), "The get_counts function in the trivial wrapper didn't return the original backend counts."
 
@@ -162,7 +155,7 @@ class TestingSPAMTwirlingWrapper(unittest.TestCase):
         wrapper_counts = self.wrapped_obj_trivial.get_counts(
             self.variate_params, n_shots=n_shots, seed=2
         )
-        backend_counts = self.qiskit_shot_backend.get_counts(
+        backend_counts = self.cirq_shot_backend.get_counts(
             self.variate_params, n_shots=n_shots
         )
 
@@ -180,7 +173,7 @@ class TestingSPAMTwirlingWrapper(unittest.TestCase):
         wrapper_counts = self.wrapped_obj.get_counts(
             self.variate_params, n_shots=n_shots, seed=26
         )
-        backend_counts = self.qiskit_shot_backend.get_counts(
+        backend_counts = self.cirq_shot_backend.get_counts(
             self.variate_params, n_shots=n_shots
         )
 
@@ -196,20 +189,19 @@ class TestingSPAMTwirlingWrapper(unittest.TestCase):
     def test_expectation_value_spam_twirled(self):
         """
         Testing the expectation_value_spam_twirled method of the SPAM Twirling
-        wrapper in the following scenarious:
+        wrapper in the following scenarios:
         Given very trivial counts where only the 00 state is present and
         calibration factors 1.0, meaning no errors, the expectation value
         of the energy must be the energy of the 00 bitstring.
         Given the same counts but calibration factors 0.5, the expectation
         value of the energy must be twice the energy of the 00 bitstring
         due to corrections coming from the calibration factors.
-
         """
         try:
             self.wrapped_obj
             self.wrapped_obj_trivial
         except NameError:
-            print("Skipping Qiskit tests as Qiskit is not installed.")
+            print("Skipping Cirq tests as Cirq is not installed.")
             return None
 
         counts = {"00": 100, "01": 0, "10": 0, "11": 0}
@@ -256,7 +248,7 @@ class TestingSPAMTwirlingWrapper(unittest.TestCase):
             self.wrapped_obj
             self.wrapped_obj_trivial
         except NameError:
-            print("Skipping Qiskit tests as Qiskit is not installed.")
+            print("Skipping Cirq tests as Cirq is not installed.")
             return None
 
         self.assertAlmostEqual(

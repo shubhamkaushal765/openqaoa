@@ -1,223 +1,116 @@
-import time
 import unittest
-from unittest.mock import Mock
-import json
 import numpy as np
 import pytest
-import subprocess
-from collections import OrderedDict
-
-from qiskit import QuantumCircuit
-from qiskit.quantum_info import Operator
-from qiskit.tools.monitor import job_monitor
-from qiskit_ibm_provider.job.exceptions import IBMJobError
-from qiskit.converters import circuit_to_dag, dag_to_circuit
+import cirq
+import time
+from unittest.mock import Mock
 
 from openqaoa.qaoa_components import (
-    create_qaoa_variational_params,
     PauliOp,
     Hamiltonian,
     QAOADescriptor,
     QAOAVariationalStandardParams,
 )
-from openqaoa_qiskit.backends import (
-    DeviceQiskit,
-    QAOAQiskitQPUBackend,
-    QAOAQiskitBackendStatevecSimulator,
-)
 from openqaoa.utilities import X_mixer_hamiltonian
-from openqaoa.problems import NumberPartition
-from openqaoa import QAOA, create_device
+from openqaoa_cirq.backends import DeviceCirq, QAOACirqQPUBackend, QAOACirqBackendStatevecSimulator
 
 
-def remove_idle_qwires(circ):
-    """Function that removes qubits that are not actred upon in a QuantumCircuit
-
-    Args:
-        circ (QuantumCircuit): quantum circuit that has unused qubits
-
-    Returns:
-        QuantumCircuit: quantum circuit without unused qubits
-    """
-    dag = circuit_to_dag(circ)
-
-    idle_wires = list(dag.idle_wires())
-    for w in idle_wires:
-        dag._remove_idle_wire(w)
-        dag.qubits.remove(w)
-
-    dag.qregs = OrderedDict()
-
-    return dag_to_circuit(dag)
-
-
-class TestingQAOAQiskitQPUBackend(unittest.TestCase):
-
-    """This Object tests the QAOA Qiskit QPU Backend objects, which is tasked with the
-    creation and execution of a QAOA circuit for the selected QPU provider and
-    backend.
-
-    IBMQ Account has to be saved locally to run these tests.
-    """
-
-    @pytest.mark.api
-    def setUp(self):
-        """
-        Define the credentials
-        """
-        self.HUB = "ibm-q"
-        self.GROUP = "open"
-        self.PROJECT = "main"
+class TestingQAOACirqQPUBackend(unittest.TestCase):
+    """Tests the QAOA Cirq QPU Backend objects for circuit creation and execution."""
 
     @pytest.mark.api
     def test_circuit_angle_assignment_qpu_backend(self):
         """
-        A tests that checks if the circuit created by the Qiskit Backend
-        has the appropriate angles assigned before the circuit is executed.
-        Checks the circuit created on both IBM QPU Backends.
+        Test if the circuit created by the Cirq Backend has the appropriate angles assigned
+        before the circuit is executed.
         """
-
         nqubits = 3
         p = 2
         weights = [1, 1, 1]
         gammas = [0, 1 / 8 * np.pi]
         betas = [1 / 2 * np.pi, 3 / 8 * np.pi]
-        shots = 10000
 
         cost_hamil = Hamiltonian(
-            [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))],
-            weights,
-            1,
+            [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))], weights, 1
         )
         mixer_hamil = X_mixer_hamiltonian(n_qubits=nqubits)
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
-        qiskit_device = DeviceQiskit(
-            "ibmq_qasm_simulator", self.HUB, self.GROUP, self.PROJECT
+        cirq_device = DeviceCirq(device_name="Simulator")
+        cirq_backend = QAOACirqQPUBackend(
+            qaoa_descriptor, cirq_device, shots=None, prepend_state=None, append_state=None, init_hadamard=False
         )
+        qpu_circuit = cirq_backend.qaoa_circuit(variate_params)
 
-        qiskit_backend = QAOAQiskitQPUBackend(
-            qaoa_descriptor, qiskit_device, shots, None, None, False
-        )
-        qpu_circuit = qiskit_backend.qaoa_circuit(variate_params)
+        # Construct the expected circuit
+        expected_circuit = cirq.Circuit()
+        qubits = cirq.LineQubit.range(nqubits)
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[1]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.CZ(qubits[1], qubits[2]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[2]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.rx(-2 * betas[0]).on_each(*qubits))
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[1]).with_parameter(2 * gammas[1]))
+        expected_circuit.append(cirq.CZ(qubits[1], qubits[2]).with_parameter(2 * gammas[1]))
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[2]).with_parameter(2 * gammas[1]))
+        expected_circuit.append(cirq.rx(-2 * betas[1]).on_each(*qubits))
 
-        # Standard Decomposition
-        main_circuit = QuantumCircuit(3)
-        main_circuit.cx(0, 1)
-        main_circuit.rz(2 * gammas[0], 1)
-        main_circuit.cx(0, 1)
-        main_circuit.cx(1, 2)
-        main_circuit.rz(2 * gammas[0], 2)
-        main_circuit.cx(1, 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rz(2 * gammas[0], 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rx(-2 * betas[0], 0)
-        main_circuit.rx(-2 * betas[0], 1)
-        main_circuit.rx(-2 * betas[0], 2)
-        main_circuit.cx(0, 1)
-        main_circuit.rz(2 * gammas[1], 1)
-        main_circuit.cx(0, 1)
-        main_circuit.cx(1, 2)
-        main_circuit.rz(2 * gammas[1], 2)
-        main_circuit.cx(1, 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rz(2 * gammas[1], 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rx(-2 * betas[1], 0)
-        main_circuit.rx(-2 * betas[1], 1)
-        main_circuit.rx(-2 * betas[1], 2)
-
-        qpu_circuit.remove_final_measurements(inplace=True)
-        qpu_circuit = remove_idle_qwires(qpu_circuit)
-        qpu_circuit_operator = Operator(qpu_circuit)
-        main_circuit_operator = Operator(main_circuit)
-
-        assert qpu_circuit_operator.equiv(main_circuit_operator)
+        # Compare the constructed circuits
+        assert qpu_circuit == expected_circuit
 
     @pytest.mark.api
     def test_circuit_angle_assignment_qpu_backend_w_hadamard(self):
-        """
-        Checks for consistent if init_hadamard is set to True.
-        """
-
+        """Test if the circuit is consistent when init_hadamard is set to True."""
         nqubits = 3
         p = 2
         weights = [1, 1, 1]
         gammas = [0, 1 / 8 * np.pi]
         betas = [1 / 2 * np.pi, 3 / 8 * np.pi]
-        shots = 10000
 
         cost_hamil = Hamiltonian(
-            [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))],
-            weights,
-            1,
+            [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))], weights, 1
         )
         mixer_hamil = X_mixer_hamiltonian(n_qubits=nqubits)
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
-        qiskit_device = DeviceQiskit(
-            "ibmq_qasm_simulator", self.HUB, self.GROUP, self.PROJECT
+        cirq_device = DeviceCirq(device_name="Simulator")
+        cirq_backend = QAOACirqQPUBackend(
+            qaoa_descriptor, cirq_device, shots=None, prepend_state=None, append_state=None, init_hadamard=True
         )
+        qpu_circuit = cirq_backend.qaoa_circuit(variate_params)
 
-        qiskit_backend = QAOAQiskitQPUBackend(
-            qaoa_descriptor, qiskit_device, shots, None, None, True
-        )
-        qpu_circuit = qiskit_backend.qaoa_circuit(variate_params)
+        # Construct the expected circuit
+        expected_circuit = cirq.Circuit()
+        qubits = cirq.LineQubit.range(nqubits)
+        expected_circuit.append(cirq.H.on_each(*qubits))
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[1]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.CZ(qubits[1], qubits[2]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[2]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.rx(-2 * betas[0]).on_each(*qubits))
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[1]).with_parameter(2 * gammas[1]))
+        expected_circuit.append(cirq.CZ(qubits[1], qubits[2]).with_parameter(2 * gammas[1]))
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[2]).with_parameter(2 * gammas[1]))
+        expected_circuit.append(cirq.rx(-2 * betas[1]).on_each(*qubits))
 
-        # Standard Decomposition
-        main_circuit = QuantumCircuit(3)
-        main_circuit.h([0, 1, 2])
-        main_circuit.cx(0, 1)
-        main_circuit.rz(2 * gammas[0], 1)
-        main_circuit.cx(0, 1)
-        main_circuit.cx(1, 2)
-        main_circuit.rz(2 * gammas[0], 2)
-        main_circuit.cx(1, 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rz(2 * gammas[0], 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rx(-2 * betas[0], 0)
-        main_circuit.rx(-2 * betas[0], 1)
-        main_circuit.rx(-2 * betas[0], 2)
-        main_circuit.cx(0, 1)
-        main_circuit.rz(2 * gammas[1], 1)
-        main_circuit.cx(0, 1)
-        main_circuit.cx(1, 2)
-        main_circuit.rz(2 * gammas[1], 2)
-        main_circuit.cx(1, 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rz(2 * gammas[1], 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rx(-2 * betas[1], 0)
-        main_circuit.rx(-2 * betas[1], 1)
-        main_circuit.rx(-2 * betas[1], 2)
-
-        qpu_circuit.remove_final_measurements(inplace=True)
-        qpu_circuit = remove_idle_qwires(qpu_circuit)
-        qpu_circuit_operator = Operator(qpu_circuit)
-        main_circuit_operator = Operator(main_circuit)
-
-        assert qpu_circuit_operator.equiv(main_circuit_operator)
+        # Compare the constructed circuits
+        assert qpu_circuit == expected_circuit
 
     @pytest.mark.api
     def test_prepend_circuit(self):
         """
         Checks if prepended circuit has been prepended correctly.
         """
-
         nqubits = 3
         p = 1
         weights = [1, 1, 1]
         gammas = [1 / 8 * np.pi]
         betas = [1 / 8 * np.pi]
-        shots = 10000
 
         # Prepended Circuit
-        prepend_circuit = QuantumCircuit(3)
-        prepend_circuit.x([0, 1, 2])
+        prepend_circuit = cirq.Circuit()
+        qubits = cirq.LineQubit.range(nqubits)
+        prepend_circuit.append([cirq.X(q) for q in qubits])
 
         cost_hamil = Hamiltonian(
             [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))],
@@ -228,38 +121,28 @@ class TestingQAOAQiskitQPUBackend(unittest.TestCase):
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
-        qiskit_device = DeviceQiskit(
-            "ibmq_qasm_simulator", self.HUB, self.GROUP, self.PROJECT
+        cirq_device = DeviceCirq(device_name="Simulator")
+        cirq_backend = QAOACirqQPUBackend(
+            qaoa_descriptor,
+            cirq_device,
+            shots=None,
+            prepend_state=prepend_circuit,
+            append_state=None,
+            init_hadamard=True,
         )
+        qpu_circuit = cirq_backend.qaoa_circuit(variate_params)
 
-        qiskit_backend = QAOAQiskitQPUBackend(
-            qaoa_descriptor, qiskit_device, shots, prepend_circuit, None, True
-        )
-        qpu_circuit = qiskit_backend.qaoa_circuit(variate_params)
+        # Construct the expected circuit
+        expected_circuit = cirq.Circuit()
+        expected_circuit.append([cirq.X(q) for q in qubits])
+        expected_circuit.append([cirq.H(q) for q in qubits])
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[1]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.CZ(qubits[1], qubits[2]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[2]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.rx(-2 * betas[0]).on_each(*qubits))
 
-        # Standard Decomposition
-        main_circuit = QuantumCircuit(3)
-        main_circuit.x([0, 1, 2])
-        main_circuit.h([0, 1, 2])
-        main_circuit.cx(0, 1)
-        main_circuit.rz(2 * gammas[0], 1)
-        main_circuit.cx(0, 1)
-        main_circuit.cx(1, 2)
-        main_circuit.rz(2 * gammas[0], 2)
-        main_circuit.cx(1, 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rz(2 * gammas[0], 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rx(-2 * betas[0], 0)
-        main_circuit.rx(-2 * betas[0], 1)
-        main_circuit.rx(-2 * betas[0], 2)
-
-        qpu_circuit.remove_final_measurements(inplace=True)
-        qpu_circuit = remove_idle_qwires(qpu_circuit)
-        qpu_circuit_operator = Operator(qpu_circuit)
-        main_circuit_operator = Operator(main_circuit)
-
-        assert qpu_circuit_operator.equiv(main_circuit_operator)
+        # Compare the constructed circuits
+        assert qpu_circuit == expected_circuit
 
     @pytest.mark.api
     def test_append_circuit(self):
@@ -267,17 +150,16 @@ class TestingQAOAQiskitQPUBackend(unittest.TestCase):
         Checks if appended circuit is appropriately appended to the back of the
         QAOA Circuit.
         """
-
         nqubits = 3
         p = 1
         weights = [1, 1, 1]
         gammas = [1 / 8 * np.pi]
         betas = [1 / 8 * np.pi]
-        shots = 10000
 
         # Appended Circuit
-        append_circuit = QuantumCircuit(3)
-        append_circuit.x([0, 1, 2])
+        append_circuit = cirq.Circuit()
+        qubits = cirq.LineQubit.range(nqubits)
+        append_circuit.append([cirq.X(q) for q in qubits])
 
         cost_hamil = Hamiltonian(
             [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))],
@@ -288,45 +170,34 @@ class TestingQAOAQiskitQPUBackend(unittest.TestCase):
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
-        qiskit_device = DeviceQiskit(
-            "ibmq_qasm_simulator", self.HUB, self.GROUP, self.PROJECT
+        cirq_device = DeviceCirq(device_name="Simulator")
+        cirq_backend = QAOACirqQPUBackend(
+            qaoa_descriptor,
+            cirq_device,
+            shots=None,
+            prepend_state=None,
+            append_state=append_circuit,
+            init_hadamard=True,
         )
+        qpu_circuit = cirq_backend.qaoa_circuit(variate_params)
 
-        qiskit_backend = QAOAQiskitQPUBackend(
-            qaoa_descriptor, qiskit_device, shots, None, append_circuit, True
-        )
-        qpu_circuit = qiskit_backend.qaoa_circuit(variate_params)
+        # Construct the expected circuit
+        expected_circuit = cirq.Circuit()
+        expected_circuit.append([cirq.H(q) for q in qubits])
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[1]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.CZ(qubits[1], qubits[2]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.CZ(qubits[0], qubits[2]).with_parameter(2 * gammas[0]))
+        expected_circuit.append(cirq.rx(-2 * betas[0]).on_each(*qubits))
+        expected_circuit.append([cirq.X(q) for q in qubits])
 
-        # Standard Decomposition
-        main_circuit = QuantumCircuit(3)
-        main_circuit.h([0, 1, 2])
-        main_circuit.cx(0, 1)
-        main_circuit.rz(2 * gammas[0], 1)
-        main_circuit.cx(0, 1)
-        main_circuit.cx(1, 2)
-        main_circuit.rz(2 * gammas[0], 2)
-        main_circuit.cx(1, 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rz(2 * gammas[0], 2)
-        main_circuit.cx(0, 2)
-        main_circuit.rx(-2 * betas[0], 0)
-        main_circuit.rx(-2 * betas[0], 1)
-        main_circuit.rx(-2 * betas[0], 2)
-        main_circuit.x([0, 1, 2])
-
-        qpu_circuit.remove_final_measurements(inplace=True)
-        qpu_circuit = remove_idle_qwires(qpu_circuit)
-        qpu_circuit_operator = Operator(qpu_circuit)
-        main_circuit_operator = Operator(main_circuit)
-
-        assert qpu_circuit_operator.equiv(main_circuit_operator)
-
+        # Compare the constructed circuits
+        assert qpu_circuit == expected_circuit
+        
     @pytest.mark.api
     def test_expectations_in_init(self):
         """
-        Testing the Exceptions in the init function of the QiskitQPUShotBasedBackend
+        Testing the Exceptions in the init function of the QAOACirqQPUBackend
         """
-
         nqubits = 3
         p = 1
         weights = [1, 1, 1]
@@ -342,70 +213,52 @@ class TestingQAOAQiskitQPUBackend(unittest.TestCase):
         mixer_hamil = X_mixer_hamiltonian(n_qubits=nqubits)
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
 
-        # Check the creation of the varitional parms
+        # Check the creation of the variational parameters
         _ = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
         # We mock the potential Exception that could occur in the Device class
-        qiskit_device = DeviceQiskit("", "", "", "")
-        qiskit_device._check_provider_connection = Mock(return_value=False)
+        cirq_device = DeviceCirq()
+        cirq_device._check_provider_connection = Mock(return_value=False)
 
-        try:
-            QAOAQiskitQPUBackend(
-                qaoa_descriptor, qiskit_device, shots, None, None, True
+        with self.assertRaises(Exception) as context:
+            QAOACirqQPUBackend(
+                qaoa_descriptor,
+                cirq_device,
+                shots,
+                None,
+                None,
+                True,
             )
-        except Exception as e:
-            self.assertEqual(str(e), "Error connecting to IBMQ.")
+        self.assertTrue("An Exception has occurred when trying to connect with the provider." in str(context.exception))
 
-        self.assertRaises(
-            Exception,
-            QAOAQiskitQPUBackend,
-            (qaoa_descriptor, qiskit_device, shots, None, None, True),
-        )
+        cirq_device = DeviceCirq(device_name="")
+        cirq_device._check_backend_connection = Mock(return_value=False)
 
-        qiskit_device = DeviceQiskit(
-            device_name="",
-            hub=self.HUB,
-            group=self.GROUP,
-            project=self.PROJECT,
-        )
-
-        try:
-            QAOAQiskitQPUBackend(
-                qaoa_descriptor, qiskit_device, shots, None, None, True
+        with self.assertRaises(Exception) as context:
+            QAOACirqQPUBackend(
+                qaoa_descriptor,
+                cirq_device,
+                shots,
+                None,
+                None,
+                True,
             )
-        except Exception as e:
-            self.assertEqual(
-                str(e),
-                "Connection to IBMQ was made. Error connecting to the specified backend.",
-            )
-
-        self.assertRaises(
-            Exception,
-            QAOAQiskitQPUBackend,
-            qaoa_descriptor,
-            qiskit_device,
-            shots,
-            None,
-            None,
-            True,
-        )
+        self.assertTrue("Please choose from " in str(context.exception))
 
     @pytest.mark.sim
     def test_remote_integration_sim_run(self):
         """
-        Checks if Remote IBM QASM Simulator is similar/close to Local IBM
+        Checks if Remote Cirq Simulator is similar/close to Local Cirq
         Statevector Simulator.
-        This test also serves as an integration test for the IBMQPU Backend.
+        This test also serves as an integration test for the QAOACirqQPUBackend.
 
         This test takes a long time to complete.
         """
-
         nqubits = 3
         p = 1
         weights = [1, 1, 1]
         gammas = [[0], [1 / 8 * np.pi], [0], [1 / 8 * np.pi]]
         betas = [[0], [0], [1 / 8 * np.pi], [1 / 8 * np.pi]]
-        shots = 10000
 
         for i in range(4):
             cost_hamil = Hamiltonian(
@@ -415,61 +268,61 @@ class TestingQAOAQiskitQPUBackend(unittest.TestCase):
             )
             mixer_hamil = X_mixer_hamiltonian(n_qubits=nqubits)
             qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
-            variate_params = QAOAVariationalStandardParams(
-                qaoa_descriptor, betas[i], gammas[i]
-            )
+            variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas[i], gammas[i])
 
-            qiskit_device = DeviceQiskit(
-                "ibmq_qasm_simulator", self.HUB, self.GROUP, self.PROJECT
+            cirq_device = DeviceCirq(device_name="Simulator")
+            cirq_backend = QAOACirqQPUBackend(
+                qaoa_descriptor,
+                cirq_device,
+                shots=10000,
+                prepend_state=None,
+                append_state=None,
+                init_hadamard=False,
             )
+            qpu_expectation = cirq_backend.expectation(variate_params)
 
-            qiskit_backend = QAOAQiskitQPUBackend(
-                qaoa_descriptor, qiskit_device, shots, None, None, False
-            )
-            qiskit_expectation = qiskit_backend.expectation(variate_params)
-
-            qiskit_statevec_backend = QAOAQiskitBackendStatevecSimulator(
+            cirq_statevec_backend = QAOACirqBackendStatevecSimulator(
                 qaoa_descriptor, None, None, False
             )
-            qiskit_statevec_expectation = qiskit_statevec_backend.expectation(
-                variate_params
-            )
+            cirq_statevec_expectation = cirq_statevec_backend.expectation(variate_params)
 
-            acceptable_delta = 0.05 * qiskit_statevec_expectation
-            self.assertAlmostEqual(
-                qiskit_expectation, qiskit_statevec_expectation, delta=acceptable_delta
-            )
-
+            acceptable_delta = 0.05 * cirq_statevec_expectation
+            self.assertAlmostEqual(qpu_expectation, cirq_statevec_expectation, delta=acceptable_delta)
+            
     @pytest.mark.api
     def test_remote_qubit_overflow(self):
         """
         If the user creates a circuit that is larger than the maximum circuit size
-        that is supported by the QPU. An Exception should be raised with the
+        that is supported by the QPU, an Exception should be raised with the
         appropriate error message alerting the user to the error.
         """
-
         shots = 100
 
+        # Create a random QUBO problem with 8 qubits
         set_of_numbers = np.random.randint(1, 10, 8).tolist()
-        qubo = NumberPartition(set_of_numbers).qubo
+        weights = [1] * len(set_of_numbers)
+        qubit_pairs = [(i, j) for i in range(8) for j in range(i + 1, 8)]
+        qubo = Hamiltonian([PauliOp("ZZ", pair) for pair in qubit_pairs], weights, 1)
 
         mixer_hamil = X_mixer_hamiltonian(n_qubits=8)
-        qaoa_descriptor = QAOADescriptor(qubo.hamiltonian, mixer_hamil, p=1)
+        qaoa_descriptor = QAOADescriptor(qubo, mixer_hamil, p=1)
 
-        # Check the creation of the varitional parms
-        _ = create_qaoa_variational_params(qaoa_descriptor, "standard", "rand")
+        # Check the creation of the variational parameters
+        _ = QAOAVariationalStandardParams(qaoa_descriptor, "rand", "rand")
 
-        qiskit_device = DeviceQiskit("ibm_kyoto", self.HUB, self.GROUP, self.PROJECT)
+        # Use a device with fewer qubits than required
+        cirq_device = DeviceCirq(device_name="Bristlecone")
 
-        try:
-            QAOAQiskitQPUBackend(
-                qaoa_descriptor, qiskit_device, shots, None, None, True
+        with self.assertRaises(Exception) as context:
+            QAOACirqQPUBackend(
+                qaoa_descriptor,
+                cirq_device,
+                shots,
+                None,
+                None,
+                True,
             )
-        except Exception as e:
-            self.assertEqual(
-                str(e),
-                "There are lesser qubits on the device than the number of qubits required for the circuit.",
-            )
+        self.assertTrue("There are fewer qubits on the device than the number of qubits required for the circuit." in str(context.exception))
 
     @pytest.mark.qpu
     def test_integration_on_emulator(self):
@@ -493,21 +346,15 @@ class TestingQAOAQiskitQPUBackend(unittest.TestCase):
         mixer_hamil = X_mixer_hamiltonian(n_qubits=nqubits)
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
-        qiskit_device = DeviceQiskit(
-            "ibm_kyoto",
-            self.HUB,
-            self.GROUP,
-            self.PROJECT,
-            as_emulator=True,
+        cirq_device = DeviceCirq(device_name="Simulator", as_emulator=True)
+
+        cirq_backend = QAOACirqQPUBackend(
+            qaoa_descriptor, cirq_device, shots, None, None, False
         )
+        cirq_expectation = cirq_backend.expectation(variate_params)
 
-        qiskit_backend = QAOAQiskitQPUBackend(
-            qaoa_descriptor, qiskit_device, shots, None, None, False
-        )
-        qiskit_expectation = qiskit_backend.expectation(variate_params)
-
-        self.assertEqual(type(qiskit_expectation.item()), float)
-
+        self.assertEqual(type(cirq_expectation), float)
+    
     @pytest.mark.qpu
     def test_remote_integration_qpu_run(self):
         """
@@ -530,30 +377,28 @@ class TestingQAOAQiskitQPUBackend(unittest.TestCase):
         mixer_hamil = X_mixer_hamiltonian(n_qubits=nqubits)
         qaoa_descriptor = QAOADescriptor(cost_hamil, mixer_hamil, p=p)
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
-        qiskit_device = DeviceQiskit("ibm_kyoto", self.HUB, self.GROUP, self.PROJECT)
+        cirq_device = DeviceCirq(device_name="Bristlecone")
 
-        qiskit_backend = QAOAQiskitQPUBackend(
-            qaoa_descriptor, qiskit_device, shots, None, None, False
+        cirq_backend = QAOACirqQPUBackend(
+            qaoa_descriptor, cirq_device, shots, None, None, False
         )
-        circuit = qiskit_backend.qaoa_circuit(variate_params)
-        job = qiskit_backend.device.backend_device.run(
-            circuit, shots=qiskit_backend.n_shots
-        )
+        circuit = cirq_backend.qaoa_circuit(variate_params)
+        job = cirq_backend.device.backend_device.run(circuit, repetitions=cirq_backend.n_shots)
 
-        # check if the cirucit is validated by IBMQ servers when submitted for execution
-        # check the status of the job and keep retrying until its completed or queued
-        while job.status().name not in ["DONE", "CANCELLED", "ERROR"]:
-            # if the job is queued, cancel the job
-            if job.status().name == "QUEUED":
-                try:
-                    job.cancel()
-                except IBMJobError as e:
-                    print(f"Job cancellation issue on IBMs end: {e}")
-            else:
-                time.sleep(1)
+        # Check if the circuit is validated by Cirq when submitted for execution
+        # Check the status of the job and keep retrying until it's completed or cancelled
+        job_state = False
+        while not job_state:
+            try:
+                result = job.results()
+                job_state = True
+            except cirq.google.api.v2.quantum_exception as e:
+                if "CANCELLED" in str(e):
+                    job_state = True
+                else:
+                    time.sleep(1)
 
-        assert job.status().name in ["DONE", "CANCELLED"]
-
+        assert job_state
 
 if __name__ == "__main__":
     unittest.main()
