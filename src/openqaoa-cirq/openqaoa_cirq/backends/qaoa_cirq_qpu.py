@@ -2,18 +2,11 @@ import time
 from typing import Optional, List
 import warnings
 
-# IBM Qiskit imports
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
-from qiskit_ibm_provider.job.exceptions import (
-    IBMJobApiError,
-    IBMJobInvalidStateError,
-    IBMJobFailureError,
-    IBMJobTimeoutError,
-)
-from qiskit.circuit import Parameter
+import cirq
+from cirq import Circuit, LineQubit, MeasurementGate
 
-from .devices import DeviceQiskit
-from .gates_qiskit import QiskitGateApplicator
+from .devices import DeviceCirq
+from .gates_cirq import CirqGateApplicator
 from openqaoa.backends.basebackend import (
     QAOABaseBackendShotBased,
     QAOABaseBackendCloud,
@@ -26,25 +19,25 @@ from openqaoa.qaoa_components.variational_parameters.variational_baseparams impo
 from openqaoa.utilities import flip_counts
 
 
-class QAOAQiskitQPUBackend(
+class QAOACirqQPUBackend(
     QAOABaseBackendParametric, QAOABaseBackendCloud, QAOABaseBackendShotBased
 ):
     """
-    A QAOA simulator as well as for real QPU using qiskit as the backend
+    A QAOA simulator as well as for real QPU using cirq as the backend
 
     Parameters
     ----------
-    device: `DeviceQiskit`
-        An object of the class ``DeviceQiskit`` which contains the credentials
+    device: `DeviceCirq`
+        An object of the class ``DeviceCirq`` which contains the credentials
         for accessing the QPU via cloud and the name of the device.
     qaoa_descriptor: `QAOADescriptor`
         An object of the class ``QAOADescriptor`` which contains information on
         circuit construction and depth of the circuit.
     n_shots: `int`
         The number of shots to be taken for each circuit.
-    prepend_state: `QuantumCircuit`
+    prepend_state: `Circuit`
         The state prepended to the circuit.
-    append_state: `QuantumCircuit`
+    append_state: `Circuit`
         The state appended to the circuit.
     init_hadamard: `bool`
         Whether to apply a Hadamard gate to the beginning of the
@@ -56,13 +49,13 @@ class QAOAQiskitQPUBackend(
     def __init__(
         self,
         qaoa_descriptor: QAOADescriptor,
-        device: DeviceQiskit,
+        device: DeviceCirq,
         n_shots: int,
-        prepend_state: Optional[QuantumCircuit],
-        append_state: Optional[QuantumCircuit],
+        prepend_state: Optional[Circuit],
+        append_state: Optional[Circuit],
         init_hadamard: bool,
         initial_qubit_mapping: Optional[List[int]] = None,
-        qiskit_optimization_level: int = 1,
+        cirq_optimization_level: int = 1,
         cvar_alpha: float = 1,
     ):
         QAOABaseBackendShotBased.__init__(
@@ -76,17 +69,16 @@ class QAOAQiskitQPUBackend(
         )
         QAOABaseBackendCloud.__init__(self, device)
 
-        self.qureg = QuantumRegister(self.n_qubits)
-        self.problem_reg = self.qureg[0 : self.problem_qubits]
-        self.creg = ClassicalRegister(len(self.problem_reg))
+        self.qubits = [LineQubit(i) for i in range(self.n_qubits)]
+        self.problem_qubits = self.qubits[0: self.problem_qubits]
 
-        if qiskit_optimization_level in [0, 1, 2, 3]:
-            self.qiskit_optimziation_level = qiskit_optimization_level
+        if cirq_optimization_level in [0, 1, 2, 3]:
+            self.cirq_optimization_level = cirq_optimization_level
         else:
             raise ValueError(
-                f"qiskit_optimization_level cannot be {qiskit_optimization_level}. Choose between 0 to 3"
+                f"cirq_optimization_level cannot be {cirq_optimization_level}. Choose between 0 to 3"
             )
-        self.gate_applicator = QiskitGateApplicator()
+        self.gate_applicator = CirqGateApplicator()
 
         if self.initial_qubit_mapping is None:
             self.initial_qubit_mapping = (
@@ -101,35 +93,23 @@ class QAOAQiskitQPUBackend(
                 )
 
         if self.prepend_state:
-            assert self.n_qubits >= len(prepend_state.qubits), (
+            assert self.n_qubits >= len(prepend_state.all_qubits()), (
                 "Cannot attach a bigger circuit" "to the QAOA routine"
             )
 
-        # if self.device.provider_connected and self.device.qpu_connected:
-        #     self.backend_qpu = self.device.backend_device
-        if self.device.provider_connected and self.device.qpu_connected in [
-            False,
-            None,
-        ]:
-            raise Exception(
-                "Connection to {} was made. Error connecting to the specified backend.".format(
-                    self.device.device_location.upper()
-                )
-            )
-
-        elif not (self.device.provider_connected and self.device.qpu_connected):
+        if not (self.device.provider_connected and self.device.qpu_connected):
             raise Exception(
                 "Error connecting to {}.".format(self.device.device_location.upper())
             )
 
         if self.device.n_qubits < self.n_qubits:
             raise Exception(
-                "There are lesser qubits on the device than the number of qubits required for the circuit."
+                "There are fewer qubits on the device than the number of qubits required for the circuit."
             )
         # For parametric circuits
         self.parametric_circuit = self.parametric_qaoa_circuit
 
-    def qaoa_circuit(self, params: QAOAVariationalBaseParams) -> QuantumCircuit:
+    def qaoa_circuit(self, params: QAOAVariationalBaseParams) -> Circuit:
         """
         The final QAOA circuit to be executed on the QPU.
 
@@ -139,44 +119,30 @@ class QAOAQiskitQPUBackend(
 
         Returns
         -------
-        qaoa_circuit: `QuantumCircuit`
+        qaoa_circuit: `Circuit`
             The final QAOA circuit after binding angles from variational parameters.
         """
         angles_list = self.obtain_angles_for_pauli_list(self.abstract_circuit, params)
-        memory_map = dict(zip(self.qiskit_parameter_list, angles_list))
-        circuit_with_angles = self.parametric_circuit.bind_parameters(memory_map)
+        param_dict = dict(zip(self.cirq_parameter_list, angles_list))
+        circuit_with_angles = self.parametric_circuit.transform_qubits(
+            lambda q: self.qubits[param_dict[q.name]]
+        )
 
         if self.append_state:
-            circuit_with_angles = circuit_with_angles.compose(self.append_state)
+            circuit_with_angles += self.append_state
 
         # only measure the problem qubits
         if self.final_mapping is None:
-            circuit_with_angles.measure(self.problem_reg, self.creg)
+            circuit_with_angles += [MeasurementGate(num_qubits=len(self.problem_qubits)).on(*self.problem_qubits)]
         else:
-            for idx, qubit in enumerate(self.final_mapping[0 : len(self.problem_reg)]):
-                cbit = self.creg[idx]
-                circuit_with_angles.measure(qubit, cbit)
+            for idx, qubit in enumerate(self.final_mapping[0: len(self.problem_qubits)]):
+                cbit = self.problem_qubits[idx]
+                circuit_with_angles += [MeasurementGate(num_qubits=1).on(qubit).with_key(str(cbit))]
 
-        if self.qaoa_descriptor.routed is True:
-            transpiled_circuit = transpile(
-                circuit_with_angles,
-                self.device.backend_device,
-                initial_layout=self.initial_qubit_mapping,
-                optimization_level=self.qiskit_optimziation_level,
-                routing_method="none",
-            )
-        else:
-            transpiled_circuit = transpile(
-                circuit_with_angles,
-                self.device.backend_device,
-                initial_layout=self.initial_qubit_mapping,
-                optimization_level=self.qiskit_optimziation_level,
-            )
-
-        return transpiled_circuit
+        return circuit_with_angles
 
     @property
-    def parametric_qaoa_circuit(self) -> QuantumCircuit:
+    def parametric_qaoa_circuit(self) -> Circuit:
         """
         Creates a parametric QAOA circuit, given the qubit pairs, single qubits with biases,
         and a set of circuit angles. Note that this function does not actually run
@@ -187,21 +153,20 @@ class QAOAQiskitQPUBackend(
             params:
                 Object of type QAOAVariationalBaseParams
         """
-        # self.reset_circuit()
-        parametric_circuit = QuantumCircuit(self.qureg, self.creg)
+        parametric_circuit = Circuit()
 
         if self.prepend_state:
-            parametric_circuit = parametric_circuit.compose(self.prepend_state)
+            parametric_circuit += self.prepend_state
         # Initial state is all |+>
         if self.init_hadamard:
-            parametric_circuit.h(self.problem_reg)
+            parametric_circuit += [cirq.H.on(q) for q in self.problem_qubits]
 
-        self.qiskit_parameter_list = []
+        self.cirq_parameter_list = []
         for each_gate in self.abstract_circuit:
             # if gate is of type mixer or cost gate, assign parameter to it
             if each_gate.gate_label.type.value in ["MIXER", "COST"]:
-                angle_param = Parameter(each_gate.gate_label.__repr__())
-                self.qiskit_parameter_list.append(angle_param)
+                angle_param = cirq.Symbol(each_gate.gate_label.__repr__())
+                self.cirq_parameter_list.append(angle_param)
                 each_gate.angle_value = angle_param
             decomposition = each_gate.decomposition("standard")
             # using the list above, construct the circuit
@@ -238,10 +203,7 @@ class QAOAQiskitQPUBackend(
         max_job_retries = 5
 
         while job_state is False:
-            # initial_layout only passed if not azure device
-            # if type(self.device).__name__ == "DeviceAzure":
-            # job = self.backend_qpu.run(circuit, **input_items)
-            job = self.device.backend_device.run(circuit, shots=n_shots)
+            job = self.device.backend_device.run(circuit, repetitions=n_shots)
 
             api_contact = False
             no_of_api_retries = 0
@@ -250,18 +212,14 @@ class QAOAQiskitQPUBackend(
             while api_contact is False:
                 try:
                     self.job_id = job.job_id()
-                    counts = job.result().get_counts()
+                    counts = job.result().histogram(key='result', fold_func=flip_counts)
                     api_contact = True
                     job_state = True
-                except (IBMJobApiError, IBMJobTimeoutError):
-                    print("There was an error when trying to contact the IBMQ API.")
+                except Exception as e:
+                    print(f"There was an error when trying to contact the Cirq API: {e}")
                     job_state = True
                     no_of_api_retries += 1
                     time.sleep(5)
-                except (IBMJobFailureError, IBMJobInvalidStateError):
-                    print("There was an error with the state of the Job in IBMQ.")
-                    no_of_job_retries += 1
-                    break
 
                 if no_of_api_retries >= max_api_retries:
                     raise ConnectionError(
@@ -269,7 +227,7 @@ class QAOAQiskitQPUBackend(
                     )
 
             if no_of_job_retries >= max_job_retries:
-                raise ConnectionError("An Error Occurred with the Job(s) sent to IBMQ.")
+                raise ConnectionError("An Error Occurred with the Job(s) sent to Cirq.")
 
         # Expose counts
         final_counts = flip_counts(counts)
@@ -278,11 +236,11 @@ class QAOAQiskitQPUBackend(
 
     def circuit_to_qasm(self, params: QAOAVariationalBaseParams) -> str:
         """
-        A method to convert the entire QAOA `QuantumCircuit` object into
-        a OpenQASM string
+        A method to convert the entire QAOA `Circuit` object into
+        an OpenQASM string
         """
         raise NotImplementedError()
-        # qasm_string = self.qaoa_circuit(params).qasm(formatted=True)
+        # qasm_string = self.qaoa_circuit(params).to_qasm()
         # return qasm_string
 
     def reset_circuit(self):

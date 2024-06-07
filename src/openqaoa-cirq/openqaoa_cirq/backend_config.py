@@ -1,31 +1,35 @@
 from .backends import (
-    DeviceQiskit,
-    QAOAQiskitQPUBackend,
-    QAOAQiskitBackendShotBasedSimulator,
-    QAOAQiskitBackendStatevecSimulator,
+    DeviceCirq,
+    QAOACirqQPUBackend,
+    QAOACirqBackendShotBasedSimulator,
+    QAOACirqBackendStatevecSimulator,
 )
 
-device_access = {DeviceQiskit: QAOAQiskitQPUBackend}
+# Mapping device access
+device_access = {DeviceCirq: QAOACirqQPUBackend}
+
+# Mapping device names to corresponding backend classes
 device_name_to_obj = {
-    "qiskit.qasm_simulator": QAOAQiskitBackendShotBasedSimulator,
-    "qiskit.shot_simulator": QAOAQiskitBackendShotBasedSimulator,
-    "qiskit.statevector_simulator": QAOAQiskitBackendStatevecSimulator,
+    "cirq.qasm_simulator": QAOACirqBackendShotBasedSimulator,
+    "cirq.shot_simulator": QAOACirqBackendShotBasedSimulator,
+    "cirq.statevector_simulator": QAOACirqBackendStatevecSimulator,
 }
-device_location = "ibmq"
-device_plugin = DeviceQiskit
-device_args = {DeviceQiskit: ["hub", "group", "project", "as_emulator"]}
+
+# Configuration details
+device_location = "google"  # or any other provider you are using with Cirq
+device_plugin = DeviceCirq
+device_args = {DeviceCirq: ["project_id"]}  # Assuming you need a project ID for Cirq
+
+# Backend arguments
 backend_args = {
-    QAOAQiskitBackendStatevecSimulator: [],
-    QAOAQiskitBackendShotBasedSimulator: [
+    QAOACirqBackendStatevecSimulator: [],
+    QAOACirqBackendShotBasedSimulator: [
         "n_shots",
         "seed_simulator",
-        "qiskit_simulation_method",
-        "noise_model",
-        "initial_qubit_mapping",
+        # Add more arguments specific to your Cirq implementation if any
     ],
-    QAOAQiskitQPUBackend: [
+    QAOACirqQPUBackend: [
         "n_shots",
-        "initial_qubit_mapping",
-        "qiskit_optimization_level",
+        # Add more arguments specific to your Cirq QPU backend if any
     ],
 }

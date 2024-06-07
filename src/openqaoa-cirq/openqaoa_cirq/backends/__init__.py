@@ -1,6 +1,6 @@
 from .devices import DeviceCirq
-from .qaoa_qiskit_qpu import QAOAQiskitQPUBackend
-from .qaoa_qiskit_sim import (
-    QAOAQiskitBackendShotBasedSimulator,
-    QAOAQiskitBackendStatevecSimulator,
+from .qaoa_cirq_qpu import QAOACirqQPUBackend
+from .qaoa_cirq_sim import (
+    QAOACirqBackendShotBasedSimulator,
+    QAOACirqBackendStatevecSimulator,
 )
