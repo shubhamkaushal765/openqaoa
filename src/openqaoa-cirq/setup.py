@@ -24,11 +24,11 @@ setup(
     version=version,
     author="Entropica Labs",
     packages=find_packages(where="."),
-    entry_points={"openqaoa.plugins": ["qiskit = openqaoa_qiskit.backend_config"]},
+    entry_points={"openqaoa.plugins": ["cirq = openqaoa_cirq.backend_config"]},
     url="https://github.com/entropicalabs/openqaoa",
     install_requires=requirements,
     license="MIT",
-    description="Qiskit Plug-in for OpenQAOA",
+    description="Cirq Plug-in for OpenQAOA",
     long_description=long_description,
     long_description_content_type="text/markdown",
     classifiers=[
