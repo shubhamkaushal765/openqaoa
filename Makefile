@@ -19,6 +19,7 @@ dev-install:
 	pip install -e ./src/openqaoa-braket
 	pip install -e ./src/openqaoa-azure
 	pip install -e ./src/openqaoa-cirq
+	pip install cirq==1.4.0
 	pip install -e .
 
 .PHONY: dev-install-tests
