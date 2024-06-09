@@ -19,7 +19,7 @@ dev-install:
 	pip install -e ./src/openqaoa-braket
 	pip install -e ./src/openqaoa-azure
 	pip install -e ./src/openqaoa-cirq
-	pip install cirq==1.4.0
+	pip install --no-deps cirq==1.4.0
 	pip install -e .
 
 .PHONY: dev-install-tests
@@ -30,6 +30,7 @@ dev-install-tests:
 	pip install -e ./src/openqaoa-braket
 	pip install -e ./src/openqaoa-azure
 	pip install -e ./src/openqaoa-cirq
+	pip install --no-deps cirq==1.4.0
 	pip install -e .
 
 .PHONY: dev-install-docs
@@ -40,6 +41,7 @@ dev-install-docs:
 	pip install -e ./src/openqaoa-braket
 	pip install -e ./src/openqaoa-azure
 	pip install -e ./src/openqaoa-cirq
+	pip install --no-deps cirq==1.4.0
 	pip install -e .
 
 .PHONY: dev-install-all
@@ -50,6 +52,7 @@ dev-install-all:
 	pip install -e ./src/openqaoa-braket
 	pip install -e ./src/openqaoa-azure
 	pip install -e ./src/openqaoa-cirq
+	pip install --no-deps cirq==1.4.0
 	pip install -e .
 
 .PHONY: dev-uninstall
@@ -61,3 +64,4 @@ dev-uninstall:
 	pip uninstall openqaoa-braket -y
 	pip uninstall openqaoa-azure -y
 	pip uninstall openqaoa-cirq -y
+	pip uninstall cirq -y
