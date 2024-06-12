@@ -24,7 +24,10 @@ def resolve_to_desired_precision(circuit, desired_precision=1e-5):
         modified_moment = []
         for op in moment.operations:
             if isinstance(op.gate, cirq.ops.eigen_gate.EigenGate):
-                if isinstance(op.gate, cirq.ops.common_gates.XPowGate):
+                if isinstance(
+                    op.gate,
+                    cirq.ops.common_gates.XPowGate,
+                ):
                     rounded_rads = (
                         np.round(
                             op.gate.exponent * np.pi / 2,
@@ -34,6 +37,12 @@ def resolve_to_desired_precision(circuit, desired_precision=1e-5):
                         / np.pi
                     )
                     rounded_gate = cirq.rx(rads=rounded_rads)
+
+                elif isinstance(op.gate, cirq.ops.common_gates.ZPowGate):
+                    rounded_rads = np.round(
+                        op.gate.exponent * np.pi, int(-np.log10(desired_precision))
+                    )
+                    rounded_gate = cirq.rz(rads=rounded_rads)
                 else:
                     rounded_exponent = np.round(
                         op.gate.exponent, int(-np.log10(desired_precision))
@@ -205,7 +214,9 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
             modified_main_circuit = resolve_to_desired_precision(main_circuit)
             modified_statevec_circuit = resolve_to_desired_precision(statevec_circuit)
 
-            self.assertEqual(modified_main_circuit, modified_statevec_circuit)
+            cirq.testing.assert_same_circuits(
+                modified_main_circuit, modified_statevec_circuit
+            )
 
     def test_prepend_circuit(self):
         """
@@ -213,6 +224,7 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
         """
 
         nqubits = 3
+        q0, q1, q2 = cirq.LineQubit.range(nqubits)
         p = 1
         weights = [1, 1, 1]
         gammas = [1 / 8 * np.pi]
@@ -221,9 +233,9 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
 
         # Prepended Circuit
         prepend_circuit = cirq.Circuit()
-        prepend_circuit.append(cirq.X(0))
-        prepend_circuit.append(cirq.X(1))
-        prepend_circuit.append(cirq.X(2))
+        prepend_circuit.append(cirq.X(q0))
+        prepend_circuit.append(cirq.X(q1))
+        prepend_circuit.append(cirq.X(q2))
 
         cost_hamil = Hamiltonian(
             [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))],
@@ -246,21 +258,27 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
 
         # Trivial Decomposition
         main_circuit = cirq.Circuit()
-        main_circuit.append(cirq.X(0))
-        main_circuit.append(cirq.X(1))
-        main_circuit.append(cirq.X(2))
-        main_circuit.append(cirq.H(0))
-        main_circuit.append(cirq.H(1))
-        main_circuit.append(cirq.H(2))
-        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(0, 1))
-        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(1, 2))
-        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(0, 2))
-        main_circuit.append(cirq.rx(-2 * betas[0])(0))
-        main_circuit.append(cirq.rx(-2 * betas[0])(1))
-        main_circuit.append(cirq.rx(-2 * betas[0])(2))
+        main_circuit.append(cirq.X(q0))
+        main_circuit.append(cirq.X(q1))
+        main_circuit.append(cirq.X(q2))
+        main_circuit.append(cirq.H(q0))
+        main_circuit.append(cirq.H(q1))
+        main_circuit.append(cirq.H(q2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0] / np.pi)(q0, q1))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0] / np.pi)(q1, q2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0] / np.pi)(q0, q2))
+        main_circuit.append(cirq.rx(-2 * betas[0])(q0))
+        main_circuit.append(cirq.rx(-2 * betas[0])(q1))
+        main_circuit.append(cirq.rx(-2 * betas[0])(q2))
 
-        self.assertEqual(main_circuit, statevec_circuit)
-        self.assertEqual(main_circuit, shot_circuit)
+        modified_main_circuit = resolve_to_desired_precision(main_circuit)
+        modified_statevec_circuit = resolve_to_desired_precision(statevec_circuit)
+        modified_shot_circuit = resolve_to_desired_precision(shot_circuit)
+
+        cirq.testing.assert_same_circuits(
+            modified_main_circuit, modified_statevec_circuit
+        )
+        cirq.testing.assert_same_circuits(modified_main_circuit, modified_shot_circuit)
 
     def test_append_circuit(self):
         """
@@ -269,6 +287,7 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
         """
 
         nqubits = 3
+        q0, q1, q2 = cirq.LineQubit.range(3)
         p = 1
         weights = [1, 1, 1]
         gammas = [1 / 8 * np.pi]
@@ -277,9 +296,9 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
 
         # Appended Circuit
         append_circuit = cirq.Circuit()
-        append_circuit.append(cirq.X(0))
-        append_circuit.append(cirq.X(1))
-        append_circuit.append(cirq.X(2))
+        append_circuit.append(cirq.X(q0))
+        append_circuit.append(cirq.X(q1))
+        append_circuit.append(cirq.X(q2))
 
         cost_hamil = Hamiltonian(
             [PauliOp("ZZ", (0, 1)), PauliOp("ZZ", (1, 2)), PauliOp("ZZ", (0, 2))],
@@ -302,21 +321,27 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
 
         # Standard Decomposition
         main_circuit = cirq.Circuit()
-        main_circuit.append(cirq.H(0))
-        main_circuit.append(cirq.H(1))
-        main_circuit.append(cirq.H(2))
-        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(0, 1))
-        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(1, 2))
-        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(0, 2))
-        main_circuit.append(cirq.rx(-2 * betas[0])(0))
-        main_circuit.append(cirq.rx(-2 * betas[0])(1))
-        main_circuit.append(cirq.rx(-2 * betas[0])(2))
-        main_circuit.append(cirq.X(0))
-        main_circuit.append(cirq.X(1))
-        main_circuit.append(cirq.X(2))
+        main_circuit.append(cirq.H(q0))
+        main_circuit.append(cirq.H(q1))
+        main_circuit.append(cirq.H(q2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0] / np.pi)(q0, q1))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0] / np.pi)(q1, q2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0] / np.pi)(q0, q2))
+        main_circuit.append(cirq.rx(-2 * betas[0])(q0))
+        main_circuit.append(cirq.rx(-2 * betas[0])(q1))
+        main_circuit.append(cirq.rx(-2 * betas[0])(q2))
+        main_circuit.append(cirq.X(q0))
+        main_circuit.append(cirq.X(q1))
+        main_circuit.append(cirq.X(q2))
 
-        self.assertEqual(main_circuit, statevec_circuit)
-        self.assertEqual(main_circuit, shot_circuit)
+        modified_main_circuit = resolve_to_desired_precision(main_circuit)
+        modified_statevec_circuit = resolve_to_desired_precision(statevec_circuit)
+        modified_shot_circuit = resolve_to_desired_precision(shot_circuit)
+
+        cirq.testing.assert_same_circuits(
+            modified_main_circuit, modified_statevec_circuit
+        )
+        cirq.testing.assert_same_circuits(modified_main_circuit, modified_shot_circuit)
 
     def test_qaoa_circuit_wavefunction_expectation_equivalence_1(self):
         """

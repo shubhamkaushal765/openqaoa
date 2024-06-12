@@ -44,6 +44,31 @@ class QAOACirqBackendShotBasedSimulator(
         RZZGateMap,
         RZXGateMap,
     ]
+    """
+    Local Shot-based simulators offered by Cirq
+
+    Parameters
+    ----------
+    qaoa_descriptor: `QAOADescriptor`
+        An object of the class ``QAOADescriptor`` which contains information on
+        circuit construction and depth of the circuit.
+
+    n_shots: `int`
+        The number of shots to be taken for each circuit.
+
+    prepend_state: `cirq.Circuit`
+        The state prepended to the circuit.
+
+    append_state: `cirq.Circuit`
+        The state appended to the circuit.
+
+    init_hadamard: `bool`
+        Whether to apply a Hadamard gate to the beginning of the
+        QAOA part of the circuit.
+
+    cvar_alpha: `float`
+        The value of alpha for the CVaR cost function.
+    """
 
     def __init__(
         self,
@@ -53,20 +78,7 @@ class QAOACirqBackendShotBasedSimulator(
         append_state: Optional[cirq.Circuit],
         init_hadamard: bool,
         cvar_alpha: float,
-        seed_simulator: Optional[int] = None,
     ):
-        """
-        Initialize the shot-based simulator backend with Cirq.
-
-        Args:
-            qaoa_descriptor (QAOADescriptor): The descriptor of the QAOA problem.
-            n_shots (int): The number of shots for sampling.
-            prepend_state (Optional[cirq.Circuit]): Circuit to prepend to the QAOA circuit.
-            append_state (Optional[cirq.Circuit]): Circuit to append to the QAOA circuit.
-            init_hadamard (bool): Whether to apply an initial layer of Hadamard gates.
-            cvar_alpha (float): The CVaR parameter.
-            seed_simulator (Optional[int]): Seed for the simulator's random number generator.
-        """
         QAOABaseBackendShotBased.__init__(
             self,
             qaoa_descriptor,
@@ -76,52 +88,60 @@ class QAOACirqBackendShotBasedSimulator(
             init_hadamard,
             cvar_alpha,
         )
-        self.gate_applicator = CirqGateApplicator()
         self.qubits = cirq.LineQubit.range(self.n_qubits)
-        self.simulator = cirq.Simulator(seed=seed_simulator)
+        self.gate_applicator = CirqGateApplicator()
+
+        if self.prepend_state:
+            assert self.n_qubits >= len(prepend_state.all_qubits()), (
+                "Cannot attach a bigger circuit " "to the QAOA routine"
+            )
+        self.simulator = cirq.Simulator()
+
+        # For parametric circuits
+        self.parametric_circuit = self.parametric_qaoa_circuit
 
     def qaoa_circuit(self, params: QAOAVariationalBaseParams) -> cirq.Circuit:
         """
-        Construct the QAOA circuit with the given parameters.
+        The final QAOA circuit to be executed on the simulator.
 
-        Args:
-            params (QAOAVariationalBaseParams): The variational parameters for the QAOA circuit.
+        Parameters
+        ----------
+        params: `QAOAVariationalBaseParams`
 
-        Returns:
-            cirq.Circuit: The constructed QAOA circuit.
+        Returns
+        -------
+        qaoa_circuit: `cirq.Circuit`
+            The final QAOA circuit after binding angles from variational parameters.
         """
         angles_list = self.obtain_angles_for_pauli_list(self.abstract_circuit, params)
-        parametric_circuit = self.parametric_qaoa_circuit()
+        circuit_with_angles = cirq.resolve_parameters(
+            self.parametric_circuit, dict(zip(self.cirq_parameter_list, angles_list))
+        )
+        # circuit_with_angles.append(cirq.measure(*self.qubits, key="z"))
 
-        for angle, gate in zip(angles_list, self.qiskit_parameter_list):
-            parametric_circuit = cirq.resolve_parameters(
-                parametric_circuit, {gate: angle}
-            )
+        return circuit_with_angles
 
-        if self.append_state:
-            parametric_circuit += self.append_state
-        parametric_circuit += cirq.measure(*self.qubits, key="result")
-
-        return parametric_circuit
-
+    @property
     def parametric_qaoa_circuit(self) -> cirq.Circuit:
         """
-        Create a parametric QAOA circuit with symbolic parameters.
-
-        Returns:
-            cirq.Circuit: The parametric QAOA circuit.
+        Creates a parametric QAOA circuit, given the qubit pairs, single qubits with biases,
+        and a set of circuit angles.
         """
         parametric_circuit = cirq.Circuit()
-        if self.prepend_state:
-            parametric_circuit += self.prepend_state
-        if self.init_hadamard:
-            parametric_circuit.append(cirq.H(q) for q in self.qubits)
 
-        self.qiskit_parameter_list = []
+        if self.prepend_state:
+            parametric_circuit.append(self.prepend_state)
+
+        # Initial state is all |+>
+        if self.init_hadamard:
+            parametric_circuit.append(cirq.H.on_each(self.qubits))
+
+        self.cirq_parameter_list = []
         for each_gate in self.abstract_circuit:
+            # if gate is of type mixer or cost gate, assign parameter to it
             if each_gate.gate_label.type.value in ["MIXER", "COST"]:
                 angle_param = sympy.Symbol(each_gate.gate_label.__repr__())
-                self.qiskit_parameter_list.append(angle_param)
+                self.cirq_parameter_list.append(angle_param)
                 each_gate.angle_value = angle_param
             if (
                 type(each_gate)
@@ -130,30 +150,42 @@ class QAOACirqBackendShotBasedSimulator(
                 decomposition = each_gate.decomposition("trivial")
             else:
                 decomposition = each_gate.decomposition("standard")
-            for gate_func, qubits in decomposition:
-                gate_func(self.gate_applicator, parametric_circuit, qubits)
+            # Create Circuit
+            for each_tuple in decomposition:
+                gate = each_tuple[0](self.gate_applicator, *each_tuple[1])
+                gate.apply_gate(parametric_circuit)
+
+        if self.append_state:
+            parametric_circuit.append(self.append_state)
 
         return parametric_circuit
 
     def get_counts(self, params: QAOAVariationalBaseParams, n_shots=None) -> dict:
         """
-        Run the QAOA circuit and get the measurement counts.
+        Returns the counts of the final QAOA circuit after binding angles from variational parameters.
 
-        Args:
-            params (QAOAVariationalBaseParams): The variational parameters for the QAOA circuit.
-            n_shots (Optional[int]): The number of shots for sampling.
+        Parameters
+        ----------
+        params: `QAOAVariationalBaseParams`
+            The QAOA parameters - an object of one of the parameter classes, containing variable parameters.
+        n_shots: `int`
+            The number of times to run the circuit. If None, n_shots is set to the default: self.n_shots
 
-        Returns:
-            dict: The measurement counts.
+        Returns
+        -------
+        counts: `dict`
+            The counts of the final QAOA circuit after binding angles from variational parameters.
         """
-        self.job_id = generate_uuid()
+        # set the number of shots, if not specified take the default
         n_shots = self.n_shots if n_shots is None else n_shots
 
         qaoa_circuit = self.qaoa_circuit(params)
         result = self.simulator.run(qaoa_circuit, repetitions=n_shots)
-        counts = result.histogram(key="result", fold_func=flip_counts)
-        self.measurement_outcomes = counts
-        return counts
+        counts = result.histogram(key="z")
+
+        final_counts = flip_counts(counts)
+        self.measurement_outcomes = final_counts
+        return final_counts
 
     def circuit_to_qasm(self):
         """
