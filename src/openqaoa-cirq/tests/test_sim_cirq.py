@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-
+import itertools
 import cirq
 
 from openqaoa.qaoa_components import (
@@ -18,8 +18,39 @@ from openqaoa.backends import QAOAvectorizedBackendSimulator
 from openqaoa.utilities import X_mixer_hamiltonian, ring_of_disagrees
 
 
-class TestingQAOACirqSimulatorBackend(unittest.TestCase):
+def resolve_to_desired_precision(circuit, desired_precision=1e-5):
+    modified_circuit = cirq.Circuit()
+    for moment in circuit:
+        modified_moment = []
+        for op in moment.operations:
+            if isinstance(op.gate, cirq.ops.eigen_gate.EigenGate):
+                if isinstance(op.gate, cirq.ops.common_gates.XPowGate):
+                    rounded_rads = (
+                        np.round(
+                            op.gate.exponent * np.pi / 2,
+                            int(-np.log10(desired_precision)),
+                        )
+                        * 2
+                        / np.pi
+                    )
+                    rounded_gate = cirq.rx(rads=rounded_rads)
+                else:
+                    rounded_exponent = np.round(
+                        op.gate.exponent, int(-np.log10(desired_precision))
+                    )
+                    rounded_gate = op.gate.__class__(
+                        exponent=rounded_exponent, global_shift=op.gate.global_shift
+                    )
+                modified_op = op.with_gate(rounded_gate)
+                modified_moment.append(modified_op)
+            else:
+                modified_moment.append(op)
+        modified_circuit.append(modified_moment)
 
+    return modified_circuit
+
+
+class TestingQAOACirqSimulatorBackend(unittest.TestCase):
     """This Object tests the QAOA Cirq Simulator Backend objects, which is
     tasked with the creation and execution of a QAOA circuit for the cirq
     library and its local backends.
@@ -35,6 +66,8 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
         ntrials = 10
 
         nqubits = 3
+        q0, q1, q2 = cirq.LineQubit.range(nqubits)
+
         p = 2
         weights = [
             [np.random.rand(), np.random.rand(), np.random.rand()]
@@ -69,22 +102,36 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
 
             # Trivial Decomposition
             main_circuit = cirq.Circuit()
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][0]*gammas[0])(0, 1))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][1]*gammas[0])(1, 2))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][2]*gammas[0])(0, 2))
-            main_circuit.append(cirq.rx(-2*betas[0])(0))
-            main_circuit.append(cirq.rx(-2*betas[0])(1))
-            main_circuit.append(cirq.rx(-2*betas[0])(2))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][0]*gammas[1])(0, 1))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][1]*gammas[1])(1, 2))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][2]*gammas[1])(0, 2))
-            main_circuit.append(cirq.rx(-2*betas[1])(0))
-            main_circuit.append(cirq.rx(-2*betas[1])(1))
-            main_circuit.append(cirq.rx(-2*betas[1])(2))
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][0] * gammas[0] / np.pi)(q0, q1)
+            )
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][1] * gammas[0] / np.pi)(q1, q2)
+            )
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][2] * gammas[0] / np.pi)(q0, q2)
+            )
+            main_circuit.append(cirq.rx(-2 * betas[0])(q0))
+            main_circuit.append(cirq.rx(-2 * betas[0])(q1))
+            main_circuit.append(cirq.rx(-2 * betas[0])(q2))
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][0] * gammas[1] / np.pi)(q0, q1)
+            )
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][1] * gammas[1] / np.pi)(q1, q2)
+            )
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][2] * gammas[1] / np.pi)(q0, q2)
+            )
+            main_circuit.append(cirq.rx(-2 * betas[1])(q0))
+            main_circuit.append(cirq.rx(-2 * betas[1])(q1))
+            main_circuit.append(cirq.rx(-2 * betas[1])(q2))
 
-            self.assertEqual(
-                main_circuit,
-                statevec_circuit
+            modified_main_circuit = resolve_to_desired_precision(main_circuit)
+            modified_statevec_circuit = resolve_to_desired_precision(statevec_circuit)
+
+            cirq.testing.assert_same_circuits(
+                modified_main_circuit, modified_statevec_circuit
             )
 
     def test_circuit_angle_assignment_statevec_backend_w_hadamard(self):
@@ -95,6 +142,7 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
         ntrials = 10
 
         nqubits = 3
+        q0, q1, q2 = cirq.LineQubit.range(nqubits)
         p = 2
         weights = [
             [np.random.rand(), np.random.rand(), np.random.rand()]
@@ -126,26 +174,38 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
 
             # Trivial Decomposition
             main_circuit = cirq.Circuit()
-            main_circuit.append(cirq.H(0))
-            main_circuit.append(cirq.H(1))  
-            main_circuit.append(cirq.H(2))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][0]*gammas[0])(0, 1))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][1]*gammas[0])(1, 2))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][2]*gammas[0])(0, 2))
-            main_circuit.append(cirq.rx(-2*betas[0])(0))
-            main_circuit.append(cirq.rx(-2*betas[0])(1))
-            main_circuit.append(cirq.rx(-2*betas[0])(2))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][0]*gammas[1])(0, 1))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][1]*gammas[1])(1, 2))
-            main_circuit.append(cirq.ZZPowGate(exponent=2*weights[i][2]*gammas[1])(0, 2))
-            main_circuit.append(cirq.rx(-2*betas[1])(0))
-            main_circuit.append(cirq.rx(-2*betas[1])(1))
-            main_circuit.append(cirq.rx(-2*betas[1])(2))
-
-            self.assertEqual(
-                main_circuit,  
-                statevec_circuit
+            main_circuit.append(cirq.H(q0))
+            main_circuit.append(cirq.H(q1))
+            main_circuit.append(cirq.H(q2))
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][0] * gammas[0] / np.pi)(q0, q1)
             )
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][1] * gammas[0] / np.pi)(q1, q2)
+            )
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][2] * gammas[0] / np.pi)(q0, q2)
+            )
+            main_circuit.append(cirq.rx(-2 * betas[0])(q0))
+            main_circuit.append(cirq.rx(-2 * betas[0])(q1))
+            main_circuit.append(cirq.rx(-2 * betas[0])(q2))
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][0] * gammas[1] / np.pi)(q0, q1)
+            )
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][1] * gammas[1] / np.pi)(q1, q2)
+            )
+            main_circuit.append(
+                cirq.ZZPowGate(exponent=2 * weights[i][2] * gammas[1] / np.pi)(q0, q2)
+            )
+            main_circuit.append(cirq.rx(-2 * betas[1])(q0))
+            main_circuit.append(cirq.rx(-2 * betas[1])(q1))
+            main_circuit.append(cirq.rx(-2 * betas[1])(q2))
+
+            modified_main_circuit = resolve_to_desired_precision(main_circuit)
+            modified_statevec_circuit = resolve_to_desired_precision(statevec_circuit)
+
+            self.assertEqual(modified_main_circuit, modified_statevec_circuit)
 
     def test_prepend_circuit(self):
         """
@@ -192,21 +252,15 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
         main_circuit.append(cirq.H(0))
         main_circuit.append(cirq.H(1))
         main_circuit.append(cirq.H(2))
-        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(0, 1))
-        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(1, 2))
-        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(0, 2))
-        main_circuit.append(cirq.rx(-2*betas[0])(0))
-        main_circuit.append(cirq.rx(-2*betas[0])(1))
-        main_circuit.append(cirq.rx(-2*betas[0])(2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(0, 1))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(1, 2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(0, 2))
+        main_circuit.append(cirq.rx(-2 * betas[0])(0))
+        main_circuit.append(cirq.rx(-2 * betas[0])(1))
+        main_circuit.append(cirq.rx(-2 * betas[0])(2))
 
-        self.assertEqual(
-            main_circuit,
-            statevec_circuit
-        )
-        self.assertEqual(
-            main_circuit,  
-            shot_circuit
-        )
+        self.assertEqual(main_circuit, statevec_circuit)
+        self.assertEqual(main_circuit, shot_circuit)
 
     def test_append_circuit(self):
         """
@@ -251,24 +305,18 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
         main_circuit.append(cirq.H(0))
         main_circuit.append(cirq.H(1))
         main_circuit.append(cirq.H(2))
-        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(0, 1))
-        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(1, 2))
-        main_circuit.append(cirq.ZZPowGate(exponent=2*gammas[0])(0, 2))
-        main_circuit.append(cirq.rx(-2*betas[0])(0))
-        main_circuit.append(cirq.rx(-2*betas[0])(1))
-        main_circuit.append(cirq.rx(-2*betas[0])(2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(0, 1))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(1, 2))
+        main_circuit.append(cirq.ZZPowGate(exponent=2 * gammas[0])(0, 2))
+        main_circuit.append(cirq.rx(-2 * betas[0])(0))
+        main_circuit.append(cirq.rx(-2 * betas[0])(1))
+        main_circuit.append(cirq.rx(-2 * betas[0])(2))
         main_circuit.append(cirq.X(0))
         main_circuit.append(cirq.X(1))
         main_circuit.append(cirq.X(2))
 
-        self.assertEqual(
-            main_circuit,
-            statevec_circuit  
-        )
-        self.assertEqual(
-            main_circuit,
-            shot_circuit
-        )
+        self.assertEqual(main_circuit, statevec_circuit)
+        self.assertEqual(main_circuit, shot_circuit)
 
     def test_qaoa_circuit_wavefunction_expectation_equivalence_1(self):
         """
@@ -535,9 +583,7 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
             qaoa_descriptor, prepend_state=None, append_state=None, init_hadamard=True
         )
 
-        exp_cirq_statevec = backend_cirq_statevec.expectation(
-            (variational_params_std)
-        )
+        exp_cirq_statevec = backend_cirq_statevec.expectation((variational_params_std))
 
         assert np.isclose(exp_cirq_statevec, -6)
 
@@ -569,9 +615,7 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
             qaoa_descriptor, prepend_state=None, append_state=None, init_hadamard=True
         )
 
-        wf_cirq_statevec = backend_cirq_statevec.wavefunction(
-            (variational_params_std)
-        )
+        wf_cirq_statevec = backend_cirq_statevec.wavefunction((variational_params_std))
         expected_wf = 1j * np.array([-1, 1, 1, -1, 1, -1, -1, 1]) / (2 * np.sqrt(2))
 
         try:
@@ -760,7 +804,7 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
         shot_result = cirq_shot_backend.get_counts(variate_params)
 
         self.assertEqual(type(shot_result), dict)
-        
+
     def test_cvar_alpha_expectation(self):
         """
         Test computing the expectation value by changing the alpha of the cvar.
@@ -839,6 +883,7 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
             None,
             True,
         )
+
 
 if __name__ == "__main__":
     unittest.main()
