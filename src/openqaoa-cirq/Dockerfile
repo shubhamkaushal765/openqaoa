@@ -30,8 +30,12 @@ RUN make dev-install-tests
 RUN make dev-install-docs
 RUN make dev-install-all
 
+RUN pip install jupyter-console
+RUN python -m ipykernel install --user --name env
+
+
 CMD ["/bin/bash"]
 
 
-# docker build -t openqaoa-cirq . | docker run --rm -it opensqaoa-cirq
-# docker run -it openqaoa-cirq 
+# docker build -t openqaoa-cirq . | docker run --rm -it openqaoa-cirq
+# docker run --rm -it  openqaoa-cirq 

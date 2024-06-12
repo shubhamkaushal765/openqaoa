@@ -12,8 +12,8 @@ class CirqGateApplicator(gates_core.GateApplicator):
         gates_core.RY.__name__: cirq.ry,
         gates_core.CX.__name__: cirq.CNOT,
         gates_core.CZ.__name__: cirq.CZ,
-        gates_core.RXX.__name__: cirq.XXPowGate,
-        gates_core.RZX.__name__: cirq.ZXPowGate,
+        gates_core.RXX.__name__: cirq.ISwapPowGate,
+        gates_core.RZX.__name__: cirq.PhasedISwapPowGate,
         gates_core.RZZ.__name__: cirq.ZZPowGate,
         gates_core.RYY.__name__: cirq.YYPowGate,
         gates_core.CPHASE.__name__: cirq.CZPowGate,
@@ -27,8 +27,8 @@ class CirqGateApplicator(gates_core.GateApplicator):
         Needed for SPAM twirling but more general than this.
         """
         qubits = [cirq.LineQubit(i) for i in range(n_qubits)]
-        parametric_circuit = cirq.Circuit()
-        return parametric_circuit, qubits
+        parametric_circuit = cirq.Circuit(qubits)
+        return parametric_circuit
 
     def gate_selector(self, gate: gates_core.Gate) -> Callable:
         selected_cirq_gate = CirqGateApplicator.CIRQ_OQ_GATE_MAPPER[gate.__name__]
