@@ -180,10 +180,14 @@ class QAOACirqBackendShotBasedSimulator(
         n_shots = self.n_shots if n_shots is None else n_shots
 
         qaoa_circuit = self.qaoa_circuit(params)
+        qubits = list(qaoa_circuit.all_qubits())
+        qaoa_circuit.append(cirq.measure(*qubits, key="z"))
         result = self.simulator.run(qaoa_circuit, repetitions=n_shots)
         counts = result.histogram(key="z")
 
-        final_counts = flip_counts(counts)
+        # final_counts = flip_counts(counts) # for qiskit, not needed here.
+        # changing the counts from {0: 100, 1: 200, 2: 100} to {"000": 100, "001": 200, "010": 100}
+        final_counts = {bin(k)[2:].zfill(len(qubits)): v for k, v in counts.items()}
         self.measurement_outcomes = final_counts
         return final_counts
 
@@ -389,7 +393,7 @@ class QAOACirqBackendStatevecSimulator(
         ckt = self.qaoa_circuit(params)
         simulator = cirq.Simulator()
         result = simulator.simulate(ckt)
-        wf = result.final_state
+        wf = result.final_state_vector
         self.measurement_outcomes = wf
         return wf
 
@@ -409,14 +413,14 @@ class QAOACirqBackendStatevecSimulator(
         `float`
             expectation value of cost operator wrt to quantum state produced by QAOA circuit
         """
-        ckt = self.qaoa_circuit(params)
-        simulator = cirq.Simulator()
-        result = simulator.simulate(ckt)
-        output_wf = result.final_state
+        output_wf = self.wavefunction(params)
         self.measurement_outcomes = output_wf
+        nqubits = len(self.cirq_cost_hamil.qubits)
+        qbits = cirq.LineQubit.range(nqubits)
+        qbit_map = {qbits[i]: i for i in range(nqubits)}
         cost = np.real(
-            cirq.expectation_from_state_vector(
-                output_wf, self.cirq_cost_hamil, self.qubits
+            self.cirq_cost_hamil.expectation_from_state_vector(
+                output_wf, qubit_map=qbit_map
             )
         )
         return cost
@@ -440,19 +444,23 @@ class QAOACirqBackendStatevecSimulator(
             expectation value and its uncertainty of cost operator wrt
             to quantum state produced by QAOA circuit.
         """
-        ckt = self.qaoa_circuit(params)
-        simulator = cirq.Simulator()
-        result = simulator.simulate(ckt)
-        output_wf = result.final_state
+        output_wf = self.wavefunction(params)
         self.measurement_outcomes = output_wf
+        nqubits = len(self.cirq_cost_hamil.qubits)
+        qbits = cirq.LineQubit.range(nqubits)
+        qbit_map = {qbits[i]: i for i in range(nqubits)}
         cost = np.real(
-            cirq.expectation_from_state_vector(
-                output_wf, self.cirq_cost_hamil, self.qubits
+            self.cirq_cost_hamil.expectation_from_state_vector(
+                output_wf, qubit_map=qbit_map
             )
         )
+
+        nqubits = len(self.cirq_cost_hamil_sq.qubits)
+        qbits = cirq.LineQubit.range(nqubits)
+        qbit_map = {qbits[i]: i for i in range(nqubits)}
         cost_sq = np.real(
-            cirq.expectation_from_state_vector(
-                output_wf, self.cirq_cost_hamil_sq, self.qubits
+            self.cirq_cost_hamil_sq.expectation_from_state_vector(
+                output_wf, qubit_map=qbit_map
             )
         )
 

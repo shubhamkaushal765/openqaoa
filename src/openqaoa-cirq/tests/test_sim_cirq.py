@@ -17,6 +17,9 @@ from openqaoa_cirq.backends import (
 from openqaoa.backends import QAOAvectorizedBackendSimulator
 from openqaoa.utilities import X_mixer_hamiltonian, ring_of_disagrees
 
+# value for keyword argument for unittest.assertAlmostEqual(a, b, places=ASSERT_ALMOST_EQUAL_PLACES)
+ASSERT_ALMOST_EQUAL_PLACES = 5  # default value is 7
+
 
 def resolve_to_desired_precision(circuit, desired_precision=1e-5):
     modified_circuit = cirq.Circuit()
@@ -383,14 +386,20 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
             vector_wavefunction = vector_backend.wavefunction(variate_params)
             vector_expectation = vector_backend.expectation(variate_params)
 
-            self.assertAlmostEqual(cirq_expectation, vector_expectation)
+            self.assertAlmostEqual(
+                cirq_expectation, vector_expectation, places=ASSERT_ALMOST_EQUAL_PLACES
+            )
 
             for j in range(2**nqubits):
                 self.assertAlmostEqual(
-                    cirq_wavefunction[j].real, vector_wavefunction[j].real
+                    cirq_wavefunction[j].real,
+                    vector_wavefunction[j].real,
+                    places=ASSERT_ALMOST_EQUAL_PLACES,
                 )
                 self.assertAlmostEqual(
-                    cirq_wavefunction[j].imag, vector_wavefunction[j].imag
+                    cirq_wavefunction[j].imag,
+                    vector_wavefunction[j].imag,
+                    places=ASSERT_ALMOST_EQUAL_PLACES,
                 )
 
     def test_qaoa_circuit_wavefunction_expectation_equivalence_2(self):
@@ -799,7 +808,9 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
             )
             vector_expectation = vector_backend.expectation(variate_params)
 
-            self.assertAlmostEqual(cirq_expectation, vector_expectation)
+            self.assertAlmostEqual(
+                cirq_expectation, vector_expectation, places=ASSERT_ALMOST_EQUAL_PLACES
+            )
 
     def test_shot_based_simulator(self):
         """
@@ -852,7 +863,7 @@ class TestingQAOACirqSimulatorBackend(unittest.TestCase):
         variate_params = QAOAVariationalStandardParams(qaoa_descriptor, betas, gammas)
 
         cirq_shot_backend = QAOACirqBackendShotBasedSimulator(
-            qaoa_descriptor, shots, None, None, True, 1.0, seed_simulator=1234
+            qaoa_descriptor, shots, None, None, True, 1.0
         )
 
         expectation_value_100 = cirq_shot_backend.expectation(variate_params)

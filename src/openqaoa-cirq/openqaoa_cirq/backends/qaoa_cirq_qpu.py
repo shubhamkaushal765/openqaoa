@@ -1,6 +1,7 @@
 import time
 from typing import Optional, List
 import warnings
+import sympy
 
 import cirq
 from cirq import Circuit, LineQubit, MeasurementGate
@@ -165,7 +166,7 @@ class QAOACirqQPUBackend(
         for each_gate in self.abstract_circuit:
             # if gate is of type mixer or cost gate, assign parameter to it
             if each_gate.gate_label.type.value in ["MIXER", "COST"]:
-                angle_param = cirq.Symbol(each_gate.gate_label.__repr__())
+                angle_param = sympy.Symbol(each_gate.gate_label.__repr__())
                 self.cirq_parameter_list.append(angle_param)
                 each_gate.angle_value = angle_param
             decomposition = each_gate.decomposition("standard")

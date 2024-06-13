@@ -1,5 +1,6 @@
 from typing import Callable
 import numpy as np
+import sympy as sp
 
 import cirq
 from cirq.circuits import Circuit
@@ -30,6 +31,39 @@ class RZXGate(cirq.Gate):
         return f"RZX({self.theta})", f"RZX({self.theta})"
 
 
+class RZZGate(cirq.Gate):
+    def __init__(self, theta):
+        super().__init__()
+        self.theta = theta
+
+    def _unitary_(self):
+        if isinstance(self.theta, sp.Symbol):
+            return np.array(
+                [
+                    [sp.exp(-1j * self.theta / 2), 0, 0, 0],
+                    [0, sp.exp(1j * self.theta / 2), 0, 0],
+                    [0, 0, sp.exp(1j * self.theta / 2), 0],
+                    [0, 0, 0, sp.exp(-1j * self.theta / 2)],
+                ]
+            )
+        else:
+            # If theta is a numeric value, compute the unitary matrix directly
+            return np.array(
+                [
+                    [np.exp(-1j * self.theta / 2), 0, 0, 0],
+                    [0, np.exp(1j * self.theta / 2), 0, 0],
+                    [0, 0, np.exp(1j * self.theta / 2), 0],
+                    [0, 0, 0, np.exp(-1j * self.theta / 2)],
+                ]
+            )
+
+    def _num_qubits_(self):
+        return 2
+
+    def _circuit_diagram_info_(self, args):
+        return f"RZZ({self.theta})", f"RZZ({self.theta})"
+
+
 class CirqGateApplicator(gates_core.GateApplicator):
     """
     All the 2q-rotation-gates take exponent as input. Under the hood,
@@ -50,7 +84,7 @@ class CirqGateApplicator(gates_core.GateApplicator):
         gates_core.CX.__name__: cirq.CNOT,
         gates_core.CZ.__name__: cirq.CZ,
         gates_core.RXX.__name__: cirq.XXPowGate,
-        gates_core.RZX.__name__: RZXGate,
+        # gates_core.RZX.__name__: RZXGate,
         gates_core.RZZ.__name__: cirq.ZZPowGate,  # (rotation angle is exponent / np.pi)
         gates_core.RYY.__name__: cirq.YYPowGate,
         gates_core.CPHASE.__name__: cirq.CZPowGate,

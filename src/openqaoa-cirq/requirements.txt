@@ -1,25 +1,26 @@
-pydantic==2.4.2
-attrs==22.2.0
-httpx==0.25.0
+cirq==1.4.0
+# pydantic==2.4.2
+# attrs==22.2.0
+# httpx==0.25.0
 
-duet>=0.2.8
-google-api-core[grpc]>=1.14.0
-googleapis-common-protos<2.0.dev0,>=1.56.2
-grpcio<2.0dev,>=1.33.2
-grpcio-status<2.0.dev0,>=1.33.2
-proto-plus>=1.20.0
-protobuf>=3.15.0
-numpy>=1.16
-pandas
-pyquil
-python-dateutil
-matplotlib
-networkx
-# qcs-api-client<0.22.0,>=0.21.0
-requests
-rpcq<4.0.0,>=3.10.0
-scipy
-sortedcontainers~=2.0
-sympy
-tqdm
-typing-extensions>=4.2
+# duet>=0.2.8
+# google-api-core[grpc]>=1.14.0
+# googleapis-common-protos<2.0.dev0,>=1.56.2
+# grpcio<2.0dev,>=1.33.2
+# grpcio-status<2.0.dev0,>=1.33.2
+# proto-plus>=1.20.0
+# protobuf>=3.15.0
+# numpy>=1.16
+# pandas
+# pyquil
+# python-dateutil
+# matplotlib
+# networkx
+# # qcs-api-client<0.22.0,>=0.21.0
+# requests
+# rpcq<4.0.0,>=3.10.0
+# scipy
+# sortedcontainers~=2.0
+# sympy
+# tqdm
+# typing-extensions>=4.2
